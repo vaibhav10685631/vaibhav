@@ -9,7 +9,3 @@ venv/Lib/site-packages/rasa/core/*
 !venv/Lib/site-packages/rasa/core/channels/
 venv/Lib/site-packages/rasa/core/channels/*
 !venv/Lib/site-packages/rasa/core/channels/botframework.py
-
-#Ignore credential and endpoint file
-credentials.yml
-endpoints.yml
