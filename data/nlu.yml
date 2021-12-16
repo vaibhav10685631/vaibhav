@@ -1,0 +1,410 @@
+version: "2.0"
+nlu:
+#General Intents
+- intent: greet
+  examples: |
+    - hey
+    - hello
+    - hi
+    - hello there
+    - good morning
+    - good evening
+    - moin
+    - hey there
+    - let's go
+    - hey dude
+    - goodmorning
+    - goodevening
+    - good afternoon
+- intent: goodbye
+  examples: |
+    - good afternoon
+    - cu
+    - good by
+    - cee you later
+    - good night
+    - bye
+    - goodbye
+    - have a nice day
+    - see you around
+    - bye bye
+    - see you later
+- intent: affirm
+  examples: |
+    - yes
+    - y
+    - indeed
+    - of course
+    - that sounds good
+    - correct
+    - sure
+    - yeah
+    - ya
+    - Ok
+    - Okay
+- intent: deny
+  examples: |
+    - no
+    - n
+    - never
+    - I don't think so
+    - don't like that
+    - no way
+    - not really
+    - naah
+    - nope
+    - I don't want to
+- intent: thankyou
+  examples: |
+    - thanks
+    - thank you
+    - Thank you so much
+    - okay thanks
+    - that was helpful thanks
+    - thanks for doing that
+    - i'm done, thanks
+- intent: stop
+  examples: |
+    - Cancel
+    - Stop
+    - I don't want to continue
+    - I don't wish to continue
+    - Quit
+    - Cancel update
+    - Go back
+    - Undo update
+    - Exit update
+    - that's not what I want
+    - I don't want to update this
+    - I wanted to update something else
+    - Don't update this
+- intent: bot_challenge
+  examples: |
+    - are you a bot?
+    - are you a human?
+    - am I talking to a bot?
+    - am I talking to a human?
+    - what is your name?
+    - who are you?
+
+#Data Fetch intents
+- intent: ask_assigned_to
+  examples: |
+    - Who is working on this incident?
+    - To whom is the ticket assigned to?
+    - This incident is assigned to which engineer?
+    - Which engineer is working on this incident?
+    - Who is the assigned person for this ticket?
+    - Engineer?
+    - assigned engineer?
+- intent: ask_assignment_group
+  examples: |
+    - Which team is working on this incident?
+    - To which team is the ticket assigned to?
+    - What is the assignment group for this ticket?
+    - Which group is working on this incident?
+    - Tell me the team looking after this incident.
+    - What is the assignment group?
+    - assignment group?
+    - group?
+- intent: ask_state
+  examples: |
+    - Please let me know the status the incident.
+    - What is the state of the incident?
+    - The incident is in which state?
+    - Tell me the status of the incident.
+    - what is the current state of the incident?
+    - what is the state?
+    - State?
+    - current state?
+- intent: ask_reassignment_count
+  examples: |
+    - How many reassignments of this ticket has happened?
+    - What is the reassignment count of the ticket?
+    - How many times has the ticket been reassigned?
+    - Has there been reassignment of the ticket?
+    - Reassignment count?
+- intent: ask_short_description
+  examples: |
+    - What is the short description of the incident?
+    - Describe the incident in short.
+    - What is the incident about?
+    - Describe the ticket in short.
+    - What is the short description of the ticket?
+    - Give a short description of the incident.
+    - Short description?
+- intent: ask_long_description
+  examples: |
+    - What is the long description of the incident?
+    - Share the description of the incident.
+    - Describe the incident.
+    - Give me a brief about the incident.
+    - Long description?
+- intent: ask_time_left
+  examples: |
+    - How much time is left for the incident?
+    - How much time for incident resolution?
+    - How much time is left for the SLA to breach?
+    - Tell me the amount of time left.
+    - How much SLA time is left?
+    - Time left for SLA breach?
+    - Time left?
+- intent: ask_sla_definition
+  examples: |
+    - What is the SLA of the incident?
+    - What is the sla defined for the incident?
+    - Give me the sla definition for this incident.
+    - sla defined on the incident?
+    - What is the sla?
+    - sla?
+    - SLA definition?
+- intent: ask_elapsed_percentage
+  examples: |
+    - What percentage of SLA has been elapsed? 
+    - SLA elapsed percentage?
+    - How much SLA has been elapsed?
+    - How much sla is over?
+    - What percent of sla is done?
+    - What is elapsed percentage of sla?
+    - Sla elspsed percentage? 
+- intent: ask_breach_time
+  examples: |
+    - What is the SLA breach time?
+    - At what time will the SLA breach?
+    - What is the planned end time for the incident?
+    - When will the SLA breach?
+    - Till what time the incident needs to be resolved?
+    - Breach time?
+    - End time?
+    - Planned end time for incident?
+- intent: ask_latest_update
+  examples: |
+    - Please share me the latest update on the incident
+    - Give me the latest update
+    - What is the latest update on the incident?
+    - What was the last action taken on the incident?
+    - What was the last work done on the incident?
+    - Is there any progress on this incident?
+    - What is the update on this incident?
+    - Latest Update?
+    - any update?
+    - any new update?
+    - new update?
+    - Any progress on the ticket?
+    - any progress?
+- intent: ask_knowledge_article
+  examples: |
+    - Is there knowledge article for this incident?
+    - Any knowledge article for this incident?
+    - Any article attached to this incident?
+    - Is there a previous article related to this incident?
+    - Is there any knowledge article related to this incident?
+    - Knowledge Article?
+- intent: ask_parent
+  examples: |
+    - Is this incident related to another incident?
+    - Is there any parent incident?
+    - Which other incident is this incident related to?
+    - Any related incident present?
+    - Is there a parent incident mentioned?
+    - parent incident?
+- intent: ask_resolution_summary
+  examples: |
+    - What is the summary of the resolution of incident?
+    - Is the incident resolved?
+    - What is the the status of resolution of the incident?
+    - Any information on resolution of the incident?
+    - Summarize the resolution information
+    - What is the resolution info?
+    - Resolution Summary?
+- intent: ask_attachment
+  examples: |
+    - Get the attachments
+    - Are there any attachments?
+    - Any screenshots attached?
+    - Are there any screenshots?
+    - Are there any files attached?
+    - Get me the files
+    - Download the attachments
+    - Load the files
+    - Download files
+    - Load the attachments
+    - Load screenshots
+    - Download screenshots
+    - See attachments
+    - See files
+    - See screenshots
+    - Is there any image attached?
+    - Download Images
+    - Fetch the attachments
+    - Fetch the files
+    - Fetch the screenshots
+    - Any attachments?
+    - Show me the attachments.
+
+#Data Push intents
+- intent: request_worknote
+  examples: |
+    - Add a note.
+    - I want to add a worknote.
+    - I want to add a comment.
+    - Update the ticket with worknote.
+    - Add a comment to the ticket.
+    - I would like to add a note.
+    - Update the worknote
+    - Add a worknote.
+    - Update note
+    - worknote
+- intent: request_assignment
+  examples: |
+    - Update assignment group.
+    - I want to change the group.
+    - Change the assignment group.
+    - Update the ticket with assignment group.
+    - Update group.
+    - Change group.
+    - Reassign the group.
+    - Update assigned to.
+    - I want to change the engineer assigned.
+    - Change the assigned engineer.
+    - Update the ticket with assigned to.
+    - Update engineer.
+    - Change engineer.
+    - Assign the ticket to another engineer.
+    - Assign ticket to engineer.
+    - Reassign the ticket.
+    - Reassign the engineer.
+    - Assign ticket
+    - Assigment form 
+- intent: request_change_state
+  examples: |
+    - I want to update the state.
+    - Change the state
+    - change the status of the incident
+    - Update the status of the ticket
+    - update incident state
+    - change state
+    - update state
+- intent: submit_worknote
+  examples: |
+    - User interaction with worknote card
+    - user interacted with worknote card
+    - worknote card interacted with by user
+    - user submitted worknote card
+- intent: submit_assignment
+  examples: |
+    - User interaction with assignment card
+    - user interacted with assignment card
+    - assignment card interacted with by user
+    - user submitted assignment card
+- intent: submit_state
+  examples: |
+    - User interaction with state card : [In Progress](new_state)
+    - User interaction with state card : [On Hold](new_state)
+    - User interaction with state card : [Resolved](new_state)       
+- intent: request_file_upload
+  examples: |
+    - upload file 
+    - attach file 
+    - attach screenshot 
+    - upload screenshot 
+    - attach image 
+    - upload photo 
+
+#Email notification intents
+- intent: request_email_update_card
+  examples: |
+    - send email card
+    - will you please send the email card
+    - start email notification feature
+    - Email card
+    - I want to send email notification
+    - send email notification
+    - send email
+    - Give latest update for email
+    - give update for email
+    - Email update card
+    - email update to stakeholders
+- intent: request_email_details_card
+  examples: |
+    - User clicked Edit Details button
+    - edit email communication details
+    - edit email template values
+    - modify the business impact 
+    - update the impacted clients
+    - modify mail template values
+    - Update the distribution list
+    - change the major incident manager
+    - modify email details
+    - email details card
+- intent: submit_email_update_card
+  examples: |
+    - User interaction with Email Update card
+    - user interacted with Email Update card
+    - Email Update card interacted with by user
+    - user submitted Email Update card
+- intent: submit_email_details_card
+  examples: |
+    - User interaction with Email Details card
+    - user interacted with Email Details card
+    - Email Details card interacted with by user
+    - user submitted Email Details card
+- intent: set_email_reminder
+  examples: |
+    - set email reminder
+    - start email reminder
+    - remind to send email notification
+    - set reminder for email
+    - reminder for sending next email
+- intent: cancel_email_reminder
+  examples: |
+    - cancel email card
+    - cancel email notification
+    - stop email reminder
+    - pause email card
+    - I don't want to send email
+    - Don't want email reminder
+    - Cancel email reminder
+    - no email 
+    - cancel email
+    - stop reminding email
+    - stop email
+
+#Synonyms
+- synonym: incident
+  examples: |
+    - ticket
+    - incident
+- synonym: attachment
+  examples: |
+    - attachment
+    - file
+    - screenshot
+    - image
+- synonym: download
+  examples: |
+    - get
+    - download 
+    - load
+- synonym: update
+  examples: |
+    - update
+    - change
+- synonym: attach
+  examples: |
+    - attach
+    - upload
+- synonym: note
+  examples: |
+    - worknote
+    - comment
+    - note
+- synonym: state
+  examples: |
+    - state
+    - status
+- synonym: cancel
+  examples: |
+    - cancel
+    - stop
+    - pause

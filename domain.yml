@@ -1,0 +1,271 @@
+version: '2.0'
+
+config:
+  store_entities_as_slots: true
+
+session_config:
+  session_expiration_time: 60
+  carry_over_slots_to_new_session: true
+
+intents:
+- greet 
+- goodbye    
+- affirm    
+- deny   
+- thankyou    
+- bot_challenge
+- stop        
+- ask_assigned_to    
+- ask_assignment_group    
+- ask_state    
+- ask_reassignment_count    
+- ask_short_description    
+- ask_long_description  
+- ask_time_left
+- ask_sla_definition
+- ask_elapsed_percentage
+- ask_breach_time 
+- ask_latest_update
+- ask_knowledge_article
+- ask_parent
+- ask_resolution_summary
+- ask_attachment
+- request_worknote
+- request_assignment
+- request_change_state
+- submit_worknote
+- submit_assignment
+- submit_state
+- request_file_upload
+- request_email_update_card
+- request_email_details_card
+- submit_email_update_card
+- submit_email_details_card
+- set_email_reminder
+- cancel_email_reminder
+- EXTERNAL_update:
+    use_entities: true
+- EXTERNAL_new:
+    use_entities: true
+- EXTERNAL_sla_reminder:
+    use_entities: true
+- EXTERNAL_no_update_reminder:
+    use_entities: true
+- EXTERNAL_email_reminder:
+    use_entities: true
+
+entities:
+- sys_id 
+- number
+- state
+- short_description
+- sys_created_on
+- priority
+- caller
+- note_info
+- note_msg
+- note_type
+- chat_id
+- time_left
+- percentage
+- new_state
+
+slots:
+  sys_id:
+    type: any
+    influence_conversation: false
+  number:
+    type: any
+    influence_conversation: false
+  state:
+    type: any
+    influence_conversation: false
+  short_description:
+    type: text
+    influence_conversation: false
+  sys_created_on:
+    type: any
+    influence_conversation: false
+  priority:
+    type: any
+    influence_conversation: false
+  caller:
+    type: text
+    influence_conversation: false
+  note_info:
+    type: text
+    influence_conversation: false
+  note_msg:
+    type: text
+    influence_conversation: false
+  note_type:
+    type: text
+    influence_conversation: false
+  chat_id:
+    type: any
+    influence_conversation: false
+  no_upd_interval:
+    type: float
+    max_value:  5000
+    influence_conversation: false
+  time_left:
+    type: text
+    influence_conversation: false
+  percentage:
+    type: text
+    influence_conversation: false
+  new_state:
+    type: text
+    influence_conversation: false
+  emailUpdCardId:
+    type: text
+    initial_value: null
+    influence_conversation: false
+  emailDetCardId:
+    type: text
+    initial_value: null
+    influence_conversation: false
+  emailUpdateHistory:
+    type: text
+    initial_value: ""
+    influence_conversation: false
+  fst_update:
+    type: text
+    initial_value: "true"
+    influence_conversation: false
+  res_flag:
+    type: text
+    initial_value: "false"
+    influence_conversation: false
+  Epriority:
+    type: text
+    influence_conversation: false
+  Emistate:
+    type: text
+    initial_value: "Declared"
+    influence_conversation: false
+  EIncSummary:
+    type: text
+    influence_conversation: false
+  EBizImp:
+    type: text
+    initial_value: "Impact assessment is in progress."
+    influence_conversation: false
+  EImpLoc:
+    type: text
+    influence_conversation: false
+  EImpClient:
+    type: text
+    influence_conversation: false
+  EImpApp:
+    type: text
+    influence_conversation: false
+  EImpUsr:
+    type: text
+    influence_conversation: false
+  EIsRepBy:
+    type: text
+    influence_conversation: false
+  EIncRef:
+    type: text
+    influence_conversation: false
+  EVendor:
+    type: text
+    influence_conversation: false
+  EIncStart:
+    type: text
+    influence_conversation: false
+  EMimEng:
+    type: text
+    influence_conversation: false
+  EMIM:
+    type: text
+    influence_conversation: false
+  ESupTeams:
+    type: text
+    influence_conversation: false
+  EWrkArnd:
+    type: text
+    influence_conversation: false
+  EChange:
+    type: text
+    influence_conversation: false
+  ERFO:
+    type: text
+    initial_value: "To be determined"
+    influence_conversation: false
+  EResTime:
+    type: text
+    initial_value: "To be determined"
+    influence_conversation: false
+  EOutDur:
+    type: text
+    initial_value: "To be determined"
+    influence_conversation: false
+  ENxtUpd:
+    type: text
+    influence_conversation: false
+  EDL:
+    type: text
+    influence_conversation: false
+  Erem_flag:
+    type: text
+    influence_conversation: false
+
+responses:
+  utter_greet:
+  - text: |-
+      Hello! I am Intelligent Incident Manager Bot. I can -> 
+      - Fetch incident details
+      - Give you updates on the ticket
+      - Update ticket fields
+      - Give Reminders for SLA and timely update
+      How can I help you?
+  utter_goodbye:
+  - text: Bye
+  utter_iamabot:
+  - text: I am a bot, powered by LTI.
+  utter_noworries:
+  - text: You are welcome.
+  - text: I'm glad it helped.
+  utter_please_rephrase:
+  - text: I'm sorry, I didn't quite understand that. Please rephrase.
+  utter_ask_latest_update:
+  - text: Please enter the Latest Update before submitting the card.
+  
+actions:
+- action_hello_world
+- action_incident_update
+- action_new_incident
+- action_assigned_to
+- action_assignment_group
+- action_state
+- action_reassignment_count
+- action_short_description
+- action_long_description
+- action_time_left
+- action_sla_definition
+- action_elapsed_percentage
+- action_breach_time
+- action_latest_update
+- action_knowledge_article
+- action_parent
+- action_resolution_summary
+- action_attachment
+- action_react_to_sla_reminder
+- action_react_to_no_update_reminder
+- action_upload_file
+- action_utter_worknote_card
+- action_utter_assignment_card
+- action_utter_state_card
+- action_update_worknote
+- action_update_assignment
+- action_update_state
+- action_utter_email_update_card
+- action_utter_email_details_card
+- action_send_email
+- action_save_email_details
+- action_set_email_reminder
+- action_cancel_email_reminder
+- action_react_to_email_reminder
+

@@ -1,0 +1,199 @@
+version: "2.0"
+
+rules:
+
+- rule: Greet user anytime the user greets
+  steps:
+  - intent: greet
+  - action: utter_greet
+
+- rule: Say goodbye anytime the user says goodbye
+  steps:
+  - intent: goodbye
+  - action: utter_goodbye
+
+- rule: Say 'I am a bot' anytime the user challenges
+  steps:
+  - intent: bot_challenge
+  - action: utter_iamabot
+
+- rule: Thank you
+  steps:
+  - intent: thankyou
+  - action: utter_noworries
+
+- rule: Ask the user to rephrase whenever they send a message with low NLU confidence
+  steps:
+  - intent: nlu_fallback
+  - action: utter_please_rephrase
+
+######## Incident Trigger Rules #####
+- rule: For New Incident Trigger
+  steps:
+  - intent: EXTERNAL_new
+  - action: action_new_incident 
+
+- rule: For Incident Update Trigger
+  steps:
+  - intent: EXTERNAL_update
+  - action: action_incident_update
+
+######### Data fetch Rules #########
+- rule: assigned to info
+  steps:
+  - intent: ask_assigned_to
+  - action: action_assigned_to
+
+- rule: assignment group info
+  steps:
+  - intent: ask_assignment_group
+  - action: action_assignment_group
+
+- rule: state info
+  steps:
+  - intent: ask_state
+  - action: action_state
+
+- rule: reassignment count info
+  steps:
+  - intent: ask_reassignment_count
+  - action: action_reassignment_count
+
+- rule: short description info
+  steps:
+  - intent: ask_short_description
+  - action: action_short_description
+
+- rule: long description info
+  steps:
+  - intent: ask_long_description
+  - action: action_long_description
+
+- rule: time left info
+  steps:
+  - intent: ask_time_left
+  - action: action_time_left
+  
+- rule: sla definition info
+  steps:
+  - intent: ask_sla_definition
+  - action: action_sla_definition
+
+- rule: percentage info
+  steps:
+  - intent: ask_elapsed_percentage
+  - action: action_elapsed_percentage
+
+- rule: breach time info
+  steps:
+  - intent: ask_breach_time
+  - action: action_breach_time
+
+- rule: latest update info
+  steps:
+  - intent: ask_latest_update
+  - action: action_latest_update
+
+- rule: knowledge article info
+  steps:
+  - intent: ask_knowledge_article
+  - action: action_knowledge_article
+
+- rule: parent incident info
+  steps:
+  - intent: ask_parent
+  - action: action_parent
+
+- rule: resolution summary info
+  steps:
+  - intent: ask_resolution_summary
+  - action: action_resolution_summary
+
+- rule: attachment info
+  steps:
+  - intent: ask_attachment
+  - action: action_attachment
+
+########## Reminder Rules ############
+- rule: Trigger `action_react_to_sla_reminder` for `EXTERNAL_sla_reminder`
+  steps:
+  - intent: EXTERNAL_sla_reminder
+  - action: action_react_to_sla_reminder
+
+- rule: Trigger `action_react_to_no_update_reminder` for `EXTERNAL_no_update_reminder`
+  steps:
+  - intent: EXTERNAL_no_update_reminder
+  - action: action_react_to_no_update_reminder
+
+- rule: Trigger `action_react_to_email_reminder` for `EXTERNAL_email_reminder`
+  steps:
+  - intent: EXTERNAL_email_reminder
+  - action: action_react_to_email_reminder
+
+###### Rules for Activating Data Push Cards #########
+- rule: Send worknote card when requested
+  steps:
+  - intent: request_worknote
+  - action: action_utter_worknote_card
+
+- rule: Send assignment card when requested
+  steps:
+  - intent: request_assignment
+  - action: action_utter_assignment_card
+
+- rule: Send state card when requested
+  steps:
+  - intent: request_change_state
+  - action: action_utter_state_card
+
+- rule: Upload file when requested
+  steps:
+  - intent: request_file_upload
+  - action: action_upload_file
+
+######## Rules for updating card data to ITSM ########
+- rule: Update the worknote when worknote card data is received
+  steps:
+  - intent: submit_worknote
+  - action: action_update_worknote
+
+- rule: Update the assignment when assignment card data is received
+  steps:
+  - intent: submit_assignment
+  - action: action_update_assignment
+
+- rule: Update the state when state card data is received
+  steps:
+  - intent: submit_state
+  - action: action_update_state
+
+######## Rules for Email Notification ########
+- rule: Send email update card when requested
+  steps:
+  - intent: request_email_update_card
+  - action: action_utter_email_update_card
+
+- rule: Send email details card when requested
+  steps:
+  - intent: request_email_details_card
+  - action: action_utter_email_details_card
+
+- rule: Send email when email update card is submitted
+  steps:
+  - intent: submit_email_details_card
+  - action: action_save_email_details
+
+- rule: Send email when email update card is submitted
+  steps:
+  - intent: submit_email_update_card
+  - action: action_send_email
+
+- rule: Set Email Reminder when requested
+  steps:
+  - intent: set_email_reminder
+  - action: action_set_email_reminder
+
+- rule: Cancel Email Reminder when requested
+  steps:
+  - intent: cancel_email_reminder
+  - action: action_cancel_email_reminder
