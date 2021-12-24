@@ -43,6 +43,7 @@ intents:
 - submit_email_details_card
 - set_email_reminder
 - cancel_email_reminder
+- generate_mir
 - EXTERNAL_update:
     use_entities: true
 - EXTERNAL_new:
@@ -268,4 +269,5 @@ actions:
 - action_set_email_reminder
 - action_cancel_email_reminder
 - action_react_to_email_reminder
+- action_generate_MIR
 

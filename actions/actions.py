@@ -10,10 +10,10 @@ from rasa_sdk import Action, Tracker
 from rasa_sdk.executor import CollectingDispatcher
 from rasa_sdk.events import ReminderScheduled, ReminderCancelled, SlotSet
 
-# from sqlalchemy import create_engine
 import requests
 import json
 import datetime
+from mailmerge import MailMerge
 
 from sqlalchemy.sql.expression import desc
 
@@ -41,6 +41,12 @@ headers = {
 bot_url = "https://smba.trafficmanager.net/in/v3/conversations/"
 
 catalogAppId = "a627d5af-87e0-4386-ae35-1ff8afe9be54"
+
+#### Sharepoint Credentials ####
+tenant = 'iimbot'
+siteName = 'MIR'
+siteId = '30caa8f1-56a6-4243-835f-4a270a97f1e0'
+folder = 'General'
 
 ######### IIM Custom Actions #########
 
@@ -101,7 +107,7 @@ class ActionNewIncident(Action):
             if response.status_code == 401:
                 print("Token Expired.....Refreshing Token")
                 headers = refresh_token()
-            elif response.status_code == 201:
+            elif response.ok:
                 chat_data = response.json()
                 chat_id = chat_data['id']
                 print("*****Chat created successfully*****")
@@ -127,7 +133,7 @@ class ActionNewIncident(Action):
             if response.status_code == 401:
                 print("Token Expired.....Refreshing Token")
                 headers = refresh_token()
-            elif response.status_code == 201:
+            elif response.ok:
                 print("*****App Installed Successfully*****")
                 break
             else:
@@ -1474,8 +1480,8 @@ class ActionReactToEmailReminder(Action):
             kill_on_user_message=False,
         )
 
-        print("\n\nEmail Input Threshold DateTime :: ",emailUpdateTime)
-        print("~~~~~~~~~~~~Email Input Threshold Reminder is Set~~~~~~~~~~~~~~")
+        print("\n\nEmail Update DateTime :: ",emailUpdateTime)
+        print("~~~~~~~~~~~~Email Update Reminder is Set~~~~~~~~~~~~~~")
 
         return [email_update_reminder]
 
@@ -2858,6 +2864,9 @@ class ActionSaveEmailDetails(Action):
         if value['Emistate'] != 'Resolved':
             try:
                 next_update = datetime.datetime.strptime(value['ENxtUpd'],'%d-%b-%Y %H:%M')
+                if next_update < datetime.datetime.now():
+                    dispatcher.utter_message(text="Please enter a future time in the Next Update Field.")
+                    return []
             except ValueError:
                 dispatcher.utter_message(text="Please enter the Next Update in proper format (For eg. 13-Dec-2021 01:30)")
                 return []
@@ -3097,7 +3106,7 @@ class ActionSaveEmailDetails(Action):
 
                 print("\n\nEmail Update DateTime :: ",emailUpdateTime)
                 print("~~~~~~~~~~~~Email Update Reminder is Set~~~~~~~~~~~~~~")
-
+        
                 dispatcher.utter_message(text="Email Notification reminder is set by "+user+". You will be reminded in 5 minutes.")
                 return_events_list.extend([email_update_reminder])
             else:
@@ -3175,13 +3184,15 @@ class ActionSendEmail(Action):
             dispatcher.utter_message("Some problem occurred while sending the Email.")
             return []
         
-        next_update = datetime.datetime.now() + datetime.timedelta(minutes=30)
-        nxt_upd_due = next_update.strftime("%d-%b-%Y %H:%M")
-        return_events_list.extend([SlotSet("emailUpdateHistory", consolidated_update), SlotSet('emailUpdCardId', None), SlotSet('ENxtUpd', nxt_upd_due)])
+        nxt_upd_due = datetime.datetime.strptime(es_dict['ENxtUpd'],'%d-%b-%Y %H:%M')
+        # next_update = datetime.datetime.now() + datetime.timedelta(minutes=30)
+        # nxt_upd_due = next_update.strftime("%d-%b-%Y %H:%M")
+        # return_events_list.extend([SlotSet('ENxtUpd', es_dict['ENxtUpd'])])
+        return_events_list.extend([SlotSet("emailUpdateHistory", consolidated_update), SlotSet('emailUpdCardId', None)])
 
-        if es_dict["Emistate"] != 'Resolved' and tracker.get_slot('Erem_flag') == 'true':
+        if es_dict["Emistate"] == 'Declared' and tracker.get_slot('Erem_flag') == 'true':
             ###### Set Email Reminder #######
-            emailUpdateTime = next_update - datetime.timedelta(minutes=5)
+            emailUpdateTime = nxt_upd_due - datetime.timedelta(minutes=5)
             email_update_reminder = ReminderScheduled(
                 "EXTERNAL_email_reminder",
                 trigger_date_time=emailUpdateTime,
@@ -3243,3 +3254,123 @@ class ActionCancelEmailReminder(Action):
         print("\n\n Cancelling Email Reminder.....")
         
         return [ReminderCancelled("email_update_rem")]
+
+###### MIR Generation Action #########
+
+class ActionGenerateMIR(Action):
+   def name(self) -> Text:
+      return "action_generate_MIR"
+
+   def run(self,
+           dispatcher: CollectingDispatcher,
+           tracker: Tracker,
+           domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+
+        global INCtableSpec, headers, tenant, siteId, siteName, folder
+
+        template = "MIR_Template.docx"
+        document = MailMerge(template)
+
+        es_dict = {}
+        for es in email_slots:
+            es_dict[es] = tracker.get_slot(es)
+
+        query_filter = '?sysparm_display_value=True&sysparm_exclude_reference_link=True&sysparm_fields=description,problem_id'
+        data = get_response(INCtableSpec, tracker.sender_id, query_filter)
+        if data != None:
+            description = data['description']
+            problem_ref = data['problem_id']
+        else:
+            description = ""
+            problem_ref = ""
+
+        document.merge(
+            incident_summary=es_dict['EIncSummary'],
+            incident_description=description,
+            business_impact=es_dict['EBizImp'],
+            impacted_sites=es_dict['EImpLoc'],
+            impacted_clients=es_dict['EImpClient'],
+            impacted_apps=es_dict['EImpApp'],
+            no_of_users_impacted=es_dict['EImpUsr'],
+            issue_reported_by=es_dict['EIsRepBy'],
+            incident_reference=es_dict['EIncRef'],
+            incident_priority=es_dict['Epriority'],
+            vendor=es_dict['EVendor'],
+            problem_ref=problem_ref,
+            incident_start=es_dict['EIncStart'],
+            mim_engaged=es_dict['EMimEng'],
+            mi_manager=es_dict['EMIM'],
+            support_teams=es_dict['ESupTeams'],
+            workaround=es_dict['EWrkArnd'],
+            change_related=es_dict['EChange'],
+            rfo=es_dict['ERFO'],
+            resolution_time=es_dict['EResTime'],
+            outage_duration=es_dict['EOutDur']
+        )
+
+        document.write('MIR-output.docx')
+
+        f = open('MIR-output.docx', 'rb')
+        fileContent = f.read()
+
+        number = tracker.get_slot('number')
+        fileName = 'MIR_' + number + '.docx'
+        url = "https://graph.microsoft.com/v1.0/sites/{0}/drive/items/root:/{1}/{2}:/content".format(siteId, folder, fileName)
+
+        while(True):
+            response = requests.put(url, headers=headers, data=fileContent)
+            if response.status_code == 401:
+                print("Token Expired.....Refreshing Token")
+                headers = refresh_token()
+            elif response.ok:
+                webUrl = response.json()['webUrl']
+                downloadUrl = response.json()['@microsoft.graph.downloadUrl'].split('?')[0]
+                downloadUrl = downloadUrl + "?SourceUrl=https://"+tenant+".sharepoint.com/sites/"+siteName+"/Shared%20Documents/"+folder+"/"+fileName
+                print("*****File Uploaded Successfully*****")
+                break
+            else:
+                print('Status:', response.status_code, 'Headers:', response.headers, 'Error Response:',response.json())
+                return []
+
+        MIR_card = {
+            "attachments":[
+                {
+                    "contentType": "application/vnd.microsoft.card.adaptive",
+                    "content":
+                    {
+                        "type": "AdaptiveCard",
+                        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                        "version": "1.2",
+                        "body": [
+                            {
+                                "type": "TextBlock",
+                                "text": "Major Incident Report has been Shared onto the Sharepoint Site. ",
+                                "wrap": True,
+                                "size": "medium",
+                                "weight": "bolder"
+                            },
+                            {
+                                "type": "ActionSet",
+                                "actions": [
+                                    {
+                                        "type": "Action.OpenUrl",
+                                        "title": "View Report",
+                                        "url": webUrl
+                                    },
+                                    {
+                                        "type": "Action.OpenUrl",
+                                        "title": "Download Report",
+                                        "url": downloadUrl
+                                    }
+                                ],
+                                "horizontalAlignment": "Center"
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+
+        dispatcher.utter_message(json_message=MIR_card)
+  
+        return []

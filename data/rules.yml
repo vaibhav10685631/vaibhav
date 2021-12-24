@@ -197,3 +197,9 @@ rules:
   steps:
   - intent: cancel_email_reminder
   - action: action_cancel_email_reminder
+
+######## Rule for MIR Generation ########
+- rule: Generate MIR report when requested
+  steps:
+  - intent: generate_mir
+  - action: action_generate_MIR
