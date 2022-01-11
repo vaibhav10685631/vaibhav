@@ -3160,19 +3160,23 @@ class ActionSendEmail(Action):
             dispatcher.utter_message(text='Please enter values in both fields before submitting.')
             return []
         
-         ##### Formatting the update in email template #####
+        ##### Formatting the update in email template #####
         email_update_history = tracker.get_slot("emailUpdateHistory")
         current_timestamp = datetime.datetime.now().strftime("%d-%b-%Y %H:%M")
         time_stamp = "<td id=\"time_stamp\"><u>"+current_timestamp+"</u></td>"
         update = "<td id=\"update\">"+ latest_update +"</td>"
         update_row = "<tr>"+time_stamp+update+"</tr>"
         consolidated_update = update_row+email_update_history
-        
+
         ##### Extracting Email Details from Slots #####
         es_dict = {}
         
         for es in email_slots:
             es_dict[es] = tracker.get_slot(es)
+
+        ######## Store the update in the Database #########
+        q ="INSERT INTO email_updates VALUES ('{0}','{1}','{2}','{3}')".format(tracker.get_slot('number'),current_timestamp,latest_update,es_dict['EMIM'])
+        result = ENGINE.execute(q)
         
         ####### Send Email Notification #######
         print("****** SEND EMAIL ******")
@@ -3307,6 +3311,20 @@ class ActionGenerateMIR(Action):
             resolution_time=es_dict['EResTime'],
             outage_duration=es_dict['EOutDur']
         )
+
+        ###### Get updates from Database ##########
+        q = "SELECT * from email_updates where number='{0}'".format(tracker.get_slot('number'))
+        result = ENGINE.execute(q)
+        sig_events = []
+        for res_row in result:
+            table_row = {
+                'date_time': res_row['date_time'],
+                'description': res_row['update'],
+                'manager': res_row['manager']
+            }
+            sig_events.append(table_row)
+
+        document.merge_rows('date_time', sig_events)
 
         document.write('MIR-output.docx')
 

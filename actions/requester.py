@@ -34,6 +34,18 @@ if not insp.has_table("incident_chat_map"):
 
     meta.create_all(ENGINE)
 
+if not insp.has_table("email_updates"):
+    meta = MetaData()
+
+    email_updates = Table(
+       'email_updates', meta, 
+       Column('number', String(30)), 
+       Column('date_time', String(35)), 
+       Column('update', String(500)),
+       Column('manager', String(50))
+    )
+
+    meta.create_all(ENGINE)
 
 BASE_URL = 'https://dev60561.service-now.com/api/now/table/'
 USER = 'admin'
