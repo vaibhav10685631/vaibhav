@@ -67,6 +67,7 @@ entities:
 - note_msg
 - note_type
 - chat_id
+- no_upd_interval
 - time_left
 - percentage
 - new_state
@@ -270,4 +271,3 @@ actions:
 - action_cancel_email_reminder
 - action_react_to_email_reminder
 - action_generate_MIR
-
