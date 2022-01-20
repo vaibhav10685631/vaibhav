@@ -379,6 +379,7 @@ nlu:
     - generate major incident report
     - mir report
     - post major incident report
+
 #Synonyms
 - synonym: incident
   examples: |

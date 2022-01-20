@@ -1,21 +1,32 @@
+"""
+This file contains functions for email notification feature.
+"""
+
 # import smtplib
 # from email.mime.text import MIMEText
 # from email.mime.multipart import MIMEMultipart
 # from email.utils import formataddr
 
-import requests
 import json
 from string import Template
+import requests
 
 from actions.requester import ENGINE
 
+# Set the request parameters
+URL = 'https://dev60561.service-now.com/api/now/v1/email'
+USER = 'admin'
+PWD = 'B@march1998'
+HEADERS = {"Content-Type":"application/json","Accept":"application/json"}
+
 def send_email_notification(chat_id: str, updates: str, subject: str, es_dict: dict ):
+    """Sends email to the stakeholders"""
 
     ###### Get Sys_id from Database ##########
-    q = "select sys_id from incident_chat_map where chat_id='{0}'".format(chat_id)
-    result = ENGINE.execute(q)
+    query = f"select sys_id from incident_chat_map where chat_id='{chat_id}'"
+    result = ENGINE.execute(query)
     sys_id = result.fetchone()['sys_id']
-    
+
     if es_dict['Emistate'] in ["Declared", "In-Progress"]:
         th_color = '#FF0000'
     elif es_dict['Emistate'] in ["On-Hold", "Under Observation", "Restored/Monitoring"]:
@@ -26,9 +37,8 @@ def send_email_notification(chat_id: str, updates: str, subject: str, es_dict: d
         th_color = "#00B0F0"
 
     #Get the Mail Template
-    f = open("mail_template.txt", "r")
-    html_mail_body = f.read()
-    f.close()
+    with open("mail_template.txt", "r", encoding='utf8') as file:
+        html_mail_body = file.read()
 
     mail_template = Template(html_mail_body)
 
@@ -58,18 +68,12 @@ def send_email_notification(chat_id: str, updates: str, subject: str, es_dict: d
         updates=updates,
         EDL=es_dict['EDL']
     )
-    
+
     ######## Creating and Sending Email using SNOW SMTP########
     #recipients = get_recipients()
     recipients = es_dict['EDL'].split(',')
     print('DL :: ', es_dict['EDL'], ' :: ', type(es_dict['EDL']))
-    # subject = "MIM - "+es_dict['EImpClient']+" - "+es_dict['Epriority']+"| "+es_dict['Emistate']+" | <"+es_dict['EImpApp']+"> | "+es_dict['EIncRef']+" | "+es_dict['EIncSummary']
-    
-    # Set the request parameters
-    url = 'https://dev60561.service-now.com/api/now/v1/email'
-    user = 'admin'
-    pwd = 'B@march1998'
-    headers = {"Content-Type":"application/json","Accept":"application/json"}
+
     data = {
         "to": recipients,
         "subject": subject,
@@ -78,17 +82,20 @@ def send_email_notification(chat_id: str, updates: str, subject: str, es_dict: d
         "table_record_id": sys_id,
     }
 
-    response = requests.post(url, auth=(user, pwd), headers=headers, data=json.dumps(data))
+    response = requests.post(URL, auth=(USER, PWD), headers=HEADERS, data=json.dumps(data))
 
     # Check for HTTP codes other than 200
-    if response.status_code != 200: 
-        print('Status:', response.status_code, 'Headers:', response.headers, 'Error Response:',response.json())
+    if response.status_code != 200:
+        print(
+            'Status:', response.status_code,
+            'Headers:', response.headers,
+            'Error Response:',response.json()
+        )
         print("\n Mail was not sent!")
         return None
-    else:
-        print("Mail successfully sent")
-        return "Success"
 
+    print("Mail successfully sent")
+    return "Success"
 
     # ######## Creating and Sending Email using Office365 SMTP ########
     # sender_email = 'iim_bot@outlook.com'
@@ -103,7 +110,7 @@ def send_email_notification(chat_id: str, updates: str, subject: str, es_dict: d
     # mail = MIMEMultipart()
     # mail["From"] = formataddr((sender_name, sender_email))
     # mail["To"] = ', '.join(recipients)
-    # subject = "MIM - "+es_dict['EImpClient']+"-"+es_dict['Epriority']+"| "+es_dict['Emistate']+" | <"+es_dict['EImpApp']+"> | "+es_dict['EIncRef']+" | "+es_dict['EIncSummary']
+    # mail["subject"] = subject
 
     # # Turn these into html MIMEText objects
     # html_MIME = MIMEText(mail_body, "html")
@@ -118,7 +125,7 @@ def send_email_notification(chat_id: str, updates: str, subject: str, es_dict: d
 
 
 def get_recipients():
+    """Gets recipients of email from database"""
+
     return ["bhaktiprabhu98@gmail.com","bhakti.prabhu@lntinfotech.com"]
     #return ["bhaktiprabhu98@gmail.com"]
-
-

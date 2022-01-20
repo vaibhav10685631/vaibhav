@@ -1,65 +1,42 @@
-# This files contains your custom actions which can be used to run
-# custom Python code.
-#
-# See this guide on how to implement these action:
-# https://rasa.com/docs/rasa/custom-actions
+"""
+This files contains all the custom actions which can be used to run IIM funtions.
+"""
 
+import json
 from typing import Any, Text, Dict, List
-from rasa_sdk import Action, Tracker
+import datetime
+import requests
+from mailmerge import MailMerge
 
+from rasa_sdk import Action, Tracker
 from rasa_sdk.executor import CollectingDispatcher
 from rasa_sdk.events import ReminderScheduled, ReminderCancelled, SlotSet
 
-import requests
-import json
-import datetime
-from mailmerge import MailMerge
-
-from sqlalchemy.sql.expression import desc
-
-from actions.requester import ENGINE, get_response,get_article,put_response,get_file_content,post_attachment,get_attachment,get_groups
+from actions.requester import ENGINE, get_response,get_article,put_response,get_file_content
+from actions.requester import post_attachment,get_attachment,get_groups
 from actions.auth_tokens import refresh_token, get_bot_headers
 from actions.card_activity import update_activity
 from actions.email_notification import send_email_notification, get_recipients
 
-f = open("access_token.txt", "r")
-ACCESS_TOKEN = f.read()
-f.close()
-
-SLAtableSpec = 'task_sla?sysparm_query=task.sys_idSTARTSWITH'
-INCtableSpec = 'incident/'
-JRNLtableSpec = 'sys_journal_field?sysparm_query=element_id='
-KNLDGtableSpec = 'm2m_kb_task?sysparm_query=task.sys_id='
-
-email_slots = ['Epriority','Emistate','EIncSummary','EBizImp','EImpLoc','EImpClient','EImpApp','EImpUsr','EIsRepBy','EIncRef','EVendor','EIncStart','EMimEng','EMIM','ESupTeams','EWrkArnd','EChange','ERFO','EResTime','EOutDur','ENxtUpd','EDL']
-
-headers = {
-    'Content-Type': 'application/json',
-    'Authorization': 'Bearer ' + ACCESS_TOKEN
-}
-
-bot_url = "https://smba.trafficmanager.net/in/v3/conversations/"
-
-catalogAppId = "a627d5af-87e0-4386-ae35-1ff8afe9be54"
-
-#### Sharepoint Credentials ####
-tenant = 'iimbot'
-siteName = 'MIR'
-siteId = '30caa8f1-56a6-4243-835f-4a270a97f1e0'
-folder = 'General'
+from actions.constants import SLA_TABLE_SPEC, INC_TABLE_SPEC, JRNL_TABLE_SPEC, KNLDG_TABLE_SPEC
+from actions.constants import EMAIL_SLOTS, BOT_URL, CATALOG_APP_ID
+from actions.constants import TENANT, SITE_ID, SITE_NAME, FOLDER
+import actions.globals
 
 ######### IIM Custom Actions #########
 
 ########### Incident Trigger from ITSM ###########
 class ActionNewIncident(Action):
-   def name(self) -> Text:
-      return "action_new_incident"
+    """Performs actions when new major incident is created"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_new_incident"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
-        
+
         ######## Get incident info from trigger intent entities ########
         sys_id = tracker.get_slot('sys_id')
         number = tracker.get_slot('number')
@@ -68,14 +45,13 @@ class ActionNewIncident(Action):
         caller = tracker.get_slot("caller")
 
         business_impact = tracker.get_slot('EBizImp')
-        if business_impact == "":
+        if not business_impact:
             business_impact = "(Impact Assessment is in progress.)"
 
         sys_created_on = tracker.get_slot('sys_created_on')
-        IncStart = datetime.datetime.strptime(sys_created_on, '%d-%m-%Y %H:%M:%S').strftime("%d-%b-%Y %H:%M")
-        
+        inc_start = datetime.datetime.strptime(sys_created_on, '%d-%m-%Y %H:%M:%S').strftime("%d-%b-%Y %H:%M")
+
         ########### 1. Create a New Chat and add Members in Teams ###################
-        global headers
 
         url = "https://graph.microsoft.com/v1.0/chats"
 
@@ -102,46 +78,54 @@ class ActionNewIncident(Action):
         }
 
         data = json.dumps(data)
-        while(True):
-            response = requests.post(url, headers=headers, data=data)
+        while True:
+            response = requests.post(url, headers=actions.globals.HEADERS, data=data)
             if response.status_code == 401:
                 print("Token Expired.....Refreshing Token")
-                headers = refresh_token()
+                refresh_token()
             elif response.ok:
                 chat_data = response.json()
                 chat_id = chat_data['id']
                 print("*****Chat created successfully*****")
                 break
             else:
-                print('Status:', response.status_code, 'Headers:', response.headers, 'Error Response:',response.json())
+                print(
+                    'Status:', response.status_code,
+                    'Headers:', response.headers,
+                    'Error Response:',response.json()
+                )
                 return []
 
         ######## 2. Map Number and Room Id and Store it in the Database #########
-        q ="INSERT INTO incident_chat_map VALUES ('{0}','{1}','{2}')".format(number,sys_id,chat_id)
-        result = ENGINE.execute(q)
+        query = f"INSERT INTO incident_chat_map VALUES ('{number}','{sys_id}','{chat_id}')"
+        ENGINE.execute(query)
 
         ########## 3. Add Bot to the Created Chat ##########
-        url = "https://graph.microsoft.com/v1.0/chats/{0}/installedApps".format(chat_id)
+        url = f"https://graph.microsoft.com/v1.0/chats/{chat_id}/installedApps"
         data = {
-        "teamsApp@odata.bind":"https://graph.microsoft.com/v1.0/appCatalogs/teamsApps/"+catalogAppId
+        "teamsApp@odata.bind":"https://graph.microsoft.com/v1.0/appCatalogs/teamsApps/"+CATALOG_APP_ID
         }
 
         data = json.dumps(data)
 
-        while(True):
-            response = requests.post(url, headers=headers, data=data)
+        while True:
+            response = requests.post(url, headers=actions.globals.HEADERS, data=data)
             if response.status_code == 401:
                 print("Token Expired.....Refreshing Token")
-                headers = refresh_token()
+                refresh_token()
             elif response.ok:
                 print("*****App Installed Successfully*****")
                 break
             else:
-                print('Status:', response.status_code, 'Headers:', response.headers, 'Error Response:',response.json())
+                print(
+                    'Status:', response.status_code,
+                    'Headers:', response.headers,
+                    'Error Response:',response.json()
+                )
                 break
 
         ###### 3. Alert Message By Bot #######
-        bot_conv_url =  bot_url+chat_id+"/activities"
+        bot_conv_url =  BOT_URL+chat_id+"/activities"
         bot_headers = get_bot_headers()
         new_ticket_alert = {
             "type":"message",
@@ -206,7 +190,7 @@ class ActionNewIncident(Action):
                                             },
                                             {
                                                 "type": "TextBlock",
-                                                "text": IncStart,
+                                                "text": inc_start,
                                                 "spacing": "Small"
                                             },
                                             {
@@ -232,10 +216,10 @@ class ActionNewIncident(Action):
             print("Error trying to send new ticket alert message. Response: %s",send_alert_response.text)
 
         ###### 4. Send Email Details Card #######
-        next_update = datetime.datetime.strptime(IncStart,'%d-%b-%Y %H:%M') + datetime.timedelta(minutes=30)
-        MIM_eng = datetime.datetime.strptime(IncStart,'%d-%b-%Y %H:%M') + datetime.timedelta(minutes=10)
+        next_update = datetime.datetime.strptime(inc_start,'%d-%b-%Y %H:%M') + datetime.timedelta(minutes=30)
+        mim_eng = datetime.datetime.strptime(inc_start,'%d-%b-%Y %H:%M') + datetime.timedelta(minutes=10)
         nxt_upd_due = next_update.strftime("%d-%b-%Y %H:%M")
-        MIM_eng_time = MIM_eng.strftime("%d-%b-%Y %H:%M")
+        mim_eng_time = mim_eng.strftime("%d-%b-%Y %H:%M")
 
         recipients = ",".join(get_recipients())
 
@@ -504,7 +488,7 @@ class ActionNewIncident(Action):
                                 "type": "Input.Text",
                                 "id": "EIncStart",
                                 "spacing": "None",
-                                "value": IncStart
+                                "value": inc_start
                             },
                             {
                                 "type": "Container",
@@ -521,7 +505,7 @@ class ActionNewIncident(Action):
                                 "type": "Input.Text",
                                 "id": "EMimEng",
                                 "spacing": "None",
-                                "value": MIM_eng_time
+                                "value": mim_eng_time
                             },
                             {
                                 "type": "Container",
@@ -734,19 +718,20 @@ class ActionNewIncident(Action):
         data = {
             "u_room_id": chat_id
         }
-        response_status, response_data = put_response(INCtableSpec, chat_id, query_filter, json.dumps(data))
+        response_status = put_response(INC_TABLE_SPEC, chat_id, query_filter, json.dumps(data))
 
-        if response_status != None:
+        if response_status is not None:
             print("\n ******Room Id Stored in the SNOW Incident Table******")
 
         return []
 
-class ActionIncidentUpdate(Action):     
+class ActionIncidentUpdate(Action):
+    """Performs actions when a major incident is updated"""
 
     def name(self) -> Text:
         return "action_incident_update"
 
-    def run(self, dispatcher: CollectingDispatcher,
+    async def run(self, dispatcher: CollectingDispatcher,
             tracker: Tracker,
             domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
@@ -758,32 +743,35 @@ class ActionIncidentUpdate(Action):
         note_msg = tracker.get_slot('note_msg')
         note_type = tracker.get_slot('note_type')
         state = tracker.get_slot('state')
-        
+
         updated_by = note_info.split('-')[-1]
         chat_id = tracker.sender_id
 
-        bot_conv_url =  bot_url+chat_id+"/activities"
+        bot_conv_url =  BOT_URL+chat_id+"/activities"
         bot_headers = get_bot_headers()
 
-        if state == "Resolved" or state == "Closed":
+        if state in ('Resolved','Closed'):
             print("The incident is Resolved/Closed")
             response = "**The incident has been "+state+".**"
             if state == "Resolved" and resolved_flag == 'false':
-                response = response + "<br> Thank you all for your participation and contribution. <br> Have a good day :)"
+                response = response + "<br> Thank you all for your participation and contribution."\
+                    " <br> Have a good day :)"
 
                 ###### Adding Resolution Summary to response #######
-                query_filter = '?sysparm_display_value=True&sysparm_exclude_reference_link=True&sysparm_fields=number,resolved_at,resolved_by,knowledge,close_code,close_notes'
-                inc_data = get_response(INCtableSpec, chat_id, query_filter)
-                if inc_data != None:
+                query_filter = "?sysparm_display_value=True&sysparm_exclude_reference_link=True"\
+                    "&sysparm_fields=number,resolved_at,resolved_by,knowledge,close_code,close_notes"
+                inc_data = get_response(INC_TABLE_SPEC, chat_id, query_filter)
+                if inc_data is not None:
                     resolved_at = inc_data['resolved_at']
                     resolved_by = inc_data['resolved_by']
                     knowledge = inc_data['knowledge']
                     resolution_code = inc_data['close_code']
                     resolution_notes = inc_data['close_notes']
 
-                    query_filter = '^sla.targetINresolution^sla.typeINSLA&sysparm_display_value=True&sysparm_exclude_reference_link=True&sysparm_fields=has_breached,business_duration'
-                    sla_data = get_response(SLAtableSpec, chat_id, query_filter)
-                    if sla_data != None:
+                    query_filter = "^sla.targetINresolution^sla.typeINSLA&sysparm_display_value=True"\
+                        "&sysparm_exclude_reference_link=True&sysparm_fields=has_breached,business_duration"
+                    sla_data = get_response(SLA_TABLE_SPEC, chat_id, query_filter)
+                    if sla_data is not None:
                         has_breached = sla_data[0]['has_breached']
                         business_duration = sla_data[0]['business_duration']
                         if has_breached:
@@ -796,22 +784,27 @@ class ActionIncidentUpdate(Action):
                         else:
                             knowledge_article = ""
 
-                        response = response + "<br><br>Following is the summary of resolution of the incident: - <br> **Resolved At:** "+resolved_at+"<br> **Resolved By:** "+resolved_by+"<br> **SLA met:** "+sla_met+"<br> **Resolution Duration:** "+business_duration+"<br> **Resolution Code:** "+resolution_code+"<br> **Resolution Notes:** "+resolution_notes+knowledge_article
-            
+                        response = response + "<br><br>Following is the summary of resolution of the incident: - "\
+                            "<br> **Resolved At:** "+resolved_at+"<br> **Resolved By:** "+resolved_by+\
+                            "<br> **SLA met:** "+sla_met+"<br> **Resolution Duration:** "+business_duration+\
+                            "<br> **Resolution Code:** "+resolution_code+"<br> **Resolution Notes:** "\
+                            +resolution_notes+knowledge_article
+
             elif resolved_flag == "true":
                 print("\n\nThe incident information is updated")
                 inc_update = {
                 "type": "message",
-                "text" : "There is a new update on the incident: - <br> **Updated By:** "+updated_by+"<br> **"+note_type+":** "+note_msg.replace('\n','<br>')
+                "text" : "There is a new update on the incident: - <br> **Updated By:** "\
+                    +updated_by+"<br> **"+note_type+":** "+note_msg.replace('\n','<br>')
                 }
 
                 send_update_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(inc_update))
 
                 if not send_update_response.ok:
                     print("Error trying to send ticket update message. Response: %s",send_update_response.text)
-                
+
                 return []
-                
+
             inc_update = {
                 "type": "message",
                 "text" : response
@@ -823,103 +816,109 @@ class ActionIncidentUpdate(Action):
                 print("Error trying to send botframework message. Response: %s",send_update_response.text)
 
             ###### Card for final email update ######
-            
+
             # final_email_card = []
 
             ##### Cancel All Reminders #####
             no_update_rem = "no_update_"+number
             print("\nCancelling Reminders..............")
             print("\n", no_update_rem, "\n email_update_rem ")
-            
+
             return [ReminderCancelled(name=no_update_rem), ReminderCancelled(name="email_update_rem"), SlotSet('res_flag','true')]
 
+        events_list = []
+        if resolved_flag == "true":
+            events_list.extend([SlotSet('res_flag','false')])
+
+        if first_update == "false":
+            print("\n\nThe incident information is updated")
+            inc_update = {
+                "type":"message",
+                "text" : "There is a new update on the incident: - <br> **Updated By:** "\
+                    +updated_by+"<br> **"+note_type+":** "+note_msg.replace('\n','<br>')
+            }
+
+            send_update_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(inc_update))
+
+            if not send_update_response.ok:
+                print("Error trying to send ticket update message. Response: %s",send_update_response.text)
         else:
-            events_list = []
-            if resolved_flag == "true":
-                events_list.extend([SlotSet('res_flag','false')])
-            
-            if first_update == "false":
-                print("\n\nThe incident information is updated")
-                inc_update = {
-                    "type":"message",
-                    "text" : "There is a new update on the incident: - <br> **Updated By:** "+updated_by+"<br> **"+note_type+":** "+note_msg.replace('\n','<br>')
-                }
+            events_list.extend([SlotSet('fst_update','false')])
 
-                send_update_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(inc_update))
+        ####### Re-setting Reminder for No Update #######
+        date = datetime.datetime.now() + datetime.timedelta(minutes=5)
+        name = "no_update_"+number
+        no_update_reminder = ReminderScheduled(
+            "EXTERNAL_no_update_reminder",
+            trigger_date_time=date,
+            entities={"chat_id": chat_id, "number": number, "no_upd_interval": 15},
+            name=name,
+            kill_on_user_message=False,
+        )
+        print("\n\nNo Update DateTime :: ",date)
+        print("~~~~~~~~~~~~No Update Reminder is Set~~~~~~~~~~~~~~")
 
-                if not send_update_response.ok:
-                    print("Error trying to send ticket update message. Response: %s",send_update_response.text)
-            else:
-                events_list.extend([SlotSet('fst_update','false')])
+        events_list.extend([no_update_reminder])
 
-            ####### Re-setting Reminder for No Update #######
-            date = datetime.datetime.now() + datetime.timedelta(minutes=5)
-            name = "no_update_"+number
-            no_update_reminder = ReminderScheduled(
-                "EXTERNAL_no_update_reminder",
-                trigger_date_time=date,
-                entities={"chat_id": chat_id, "number": number, "no_upd_interval": 15},
-                name=name,
-                kill_on_user_message=False,
-            )
-            print("\n\nNo Update DateTime :: ",date)
-            print("~~~~~~~~~~~~No Update Reminder is Set~~~~~~~~~~~~~~")
-            
-            events_list.extend([no_update_reminder])
-
-            return events_list
+        return events_list
 
 ############## Data Fetch actions ################
 class ActionAssignedTo(Action):
-   def name(self) -> Text:
-      return "action_assigned_to"
+    """Fetches Assigned Engineer from Incident Table in ITSM"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_assigned_to"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
         query_filter = '?sysparm_display_value=True&sysparm_exclude_reference_link=True&sysparm_fields=assigned_to'
-        data = get_response(INCtableSpec, tracker.sender_id, query_filter)
-        if data != None:
+        data = get_response(INC_TABLE_SPEC, tracker.sender_id, query_filter)
+        if data is not None:
             assigned_to = data['assigned_to']
-            if assigned_to == "":
+            if not assigned_to:
                 dispatcher.utter_message(text = "The ticket is not assigned to anyone.")
             else:
                 dispatcher.utter_message(text = "The ticket is assigned to **"+assigned_to+"**.")
         return []
 
 class ActionAssignmentGroup(Action):
-   def name(self) -> Text:
-      return "action_assignment_group"
+    """Fetches Assignment Group from Incident Table in ITSM"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_assignment_group"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
         query_filter = '?sysparm_display_value=True&sysparm_exclude_reference_link=True&sysparm_fields=assignment_group'
-        data = get_response(INCtableSpec, tracker.sender_id, query_filter)
-        if data != None:
+        data = get_response(INC_TABLE_SPEC, tracker.sender_id, query_filter)
+        if data is not None:
             assignment_group = data['assignment_group']
-            if assignment_group == "":
+            if not assignment_group:
                 dispatcher.utter_message(text = "The ticket is not assigned to any group.")
             else:
                 dispatcher.utter_message(text = "The ticket is assigned to **"+assignment_group+"** group.")
         return []
 
 class ActionState(Action):
-   def name(self) -> Text:
-      return "action_state"
+    """Fetches Incident State from Incident Table in ITSM"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_state"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
         query_filter = '?sysparm_display_value=True&sysparm_fields=state,hold_reason'
-        data = get_response(INCtableSpec, tracker.sender_id, query_filter)
-        if data != None:
+        data = get_response(INC_TABLE_SPEC, tracker.sender_id, query_filter)
+        if data is not None:
             state = data['state']
             hold_reason = data['hold_reason']
             ans = "The state of the incident is: **"+state+"**."
@@ -931,17 +930,19 @@ class ActionState(Action):
         return []
 
 class ActionReassignmentCount(Action):
-   def name(self) -> Text:
-      return "action_reassignment_count"
+    """Fetches Incident Reassignment Count from Incident Table in ITSM"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_reassignment_count"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
         query_filter = '?sysparm_fields=reassignment_count'
-        data = get_response(INCtableSpec, tracker.sender_id, query_filter)
-        if data != None:
+        data = get_response(INC_TABLE_SPEC, tracker.sender_id, query_filter)
+        if data is not None:
             reassignment_count = data['reassignment_count']
 
             dispatcher.utter_message(text = "The reassignment count of the incident is **"+reassignment_count+"**.")
@@ -949,17 +950,19 @@ class ActionReassignmentCount(Action):
         return []
 
 class ActionShortDescription(Action):
-   def name(self) -> Text:
-      return "action_short_description"
+    """Fetches Short Description of Incident from Incident Table in ITSM"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_short_description"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
         query_filter = '?sysparm_fields=short_description'
-        data = get_response(INCtableSpec, tracker.sender_id, query_filter)
-        if data != None:
+        data = get_response(INC_TABLE_SPEC, tracker.sender_id, query_filter)
+        if data is not None:
             short_description = data['short_description']
 
             dispatcher.utter_message(text = "The short description of the incident is:<br> *"+short_description+"*")
@@ -967,135 +970,148 @@ class ActionShortDescription(Action):
         return []
 
 class ActionLongDescription(Action):
-   def name(self) -> Text:
-      return "action_long_description"
+    """Fetches Long Description of Incident from Incident Table in ITSM"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_long_description"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
         query_filter = '?sysparm_fields=description'
-        data = get_response(INCtableSpec, tracker.sender_id, query_filter)
-        if data != None:
+        data = get_response(INC_TABLE_SPEC, tracker.sender_id, query_filter)
+        if data is not None:
             long_description = data['description']
             if long_description == "":
                 dispatcher.utter_message(text = "There is no long description for this incident.")
             else:
                 dispatcher.utter_message(text = "The description of the incident is:<br> *"+long_description+"*")
-            
+
             files = get_attachment(tracker.sender_id)
-            if files != None:
-                if len(files) != 0:            
+            if files:
+                if len(files) != 0:
                     attachment_links = ''
                     for attachment in files:
                         attachment_links = attachment_links+' - ['+attachment['file_name']+']('+attachment['download_link']+')<br>'
 
-                    reply = "Following are the files attached to the incident:<br>"+attachment_links+"<br>*(Click on the ones you wish to download.)*"
-                
+                    reply = "Following are the files attached to the incident:<br>"\
+                        +attachment_links+"<br>*(Click on the ones you wish to download.)*"
+
                     dispatcher.utter_message(text = reply)
         return []
 
 class ActionTimeLeft(Action):
-   def name(self) -> Text:
-      return "action_time_left"
+    """Fetches Time Left for the Incident to breach the SLA from Task SLA Table in ITSM"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_time_left"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
         query_filter = '^sla.targetINresolution^sla.typeINSLA&sysparm_display_value=True&sysparm_fields=time_left'
-        data = get_response(SLAtableSpec, tracker.sender_id, query_filter)
-        if data != None:
+        data = get_response(SLA_TABLE_SPEC, tracker.sender_id, query_filter)
+        if data is not None:
             time_left = data[0]['time_left']
             if int(time_left.split(' ')[0]) == 0:
                 reply = "<span style='color: red;'>*The sla has been breached. There is no time left.*</span>"
-                
+
             elif int(time_left.split(' ')[0]) == 1:
                 reply = "There is **"+time_left+"** left for incident resolution."
-                
-            else:  
+
+            else:
                 reply = "There are **"+time_left+"** left for incident resolution."
-                
+
             dispatcher.utter_message(text = reply)
 
         return []
 
 class ActionSlaDefinition(Action):
-   def name(self) -> Text:
-      return "action_sla_definition"
+    """Fetches SLA Definition of the Incident from Task SLA Table in ITSM"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_sla_definition"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
-        query_filter = '^sla.targetINresolution^sla.typeINSLA&sysparm_display_value=True&sysparm_exclude_reference_link=True&sysparm_fields=sla'
-        data = get_response(SLAtableSpec, tracker.sender_id, query_filter)
-        if data != None:
+        query_filter = "^sla.targetINresolution^sla.typeINSLA&sysparm_display_value=True"\
+            "&sysparm_exclude_reference_link=True&sysparm_fields=sla"
+        data = get_response(SLA_TABLE_SPEC, tracker.sender_id, query_filter)
+        if data is not None:
             sla = data[0]['sla']
 
             reply = "The SLA defined for the incident is: **"+sla+"**"
-            
+
             dispatcher.utter_message(text = reply)
 
         return []
 
 class ActionElapsedPercentage(Action):
-   def name(self) -> Text:
-      return "action_elapsed_percentage"
+    """Fetches SLA Elapsed Percentage from Task SLA Table in ITSM"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_elapsed_percentage"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
         query_filter = '^sla.targetINresolution^sla.typeINSLA&sysparm_fields=percentage'
-        data = get_response(SLAtableSpec, tracker.sender_id, query_filter)
-        if data != None:
+        data = get_response(SLA_TABLE_SPEC, tracker.sender_id, query_filter)
+        if data is not None:
             percentage = data[0]['percentage']
 
             reply = "**"+percentage+"%** of SLA has been elapsed."
-            
+
             dispatcher.utter_message(text = reply)
 
         return []
 
 class ActionBreachTime(Action):
-   def name(self) -> Text:
-      return "action_breach_time"
+    """Fetches Breach Time of the Incident from Task SLA Table in ITSM"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_breach_time"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
         query_filter = '^sla.targetINresolution^sla.typeINSLA&sysparm_display_value=True&sysparm_fields=planned_end_time,time_left'
-        data = get_response(SLAtableSpec, tracker.sender_id, query_filter)
-        if data != None:
+        data = get_response(SLA_TABLE_SPEC, tracker.sender_id, query_filter)
+        if data is not None:
             breach_time = data[0]['planned_end_time']
             time_left = data[0]['time_left']
 
             reply = "The planned end time for this incident is: **"+breach_time+"**<br> Time Left: *"+time_left+"*"
-            
+
             dispatcher.utter_message(text = reply)
 
         return []
 
 class ActionLatestUpdate(Action):
+    """Fetches Latest Worknote of the Incident from Journal Table in ITSM"""
 
-   def name(self) -> Text:
-      return "action_latest_update"
+    def name(self) -> Text:
+        return "action_latest_update"
 
-   def run(self,
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
         query_filter = '^ORDERBYDESCsys_created_on&sysparm_fields=sys_created_on,sys_created_by,element,value&sysparm_limit=1'
-        data = get_response(JRNLtableSpec, tracker.sender_id, query_filter)
-        if data != None:
+        data = get_response(JRNL_TABLE_SPEC, tracker.sender_id, query_filter)
+        if data is not None:
             updated_on = data[0]['sys_created_on']
             updated_by = data[0]['sys_created_by']
             element = data[0]['element']
@@ -1106,62 +1122,71 @@ class ActionLatestUpdate(Action):
             else:
                 element = "Comment"
 
-            reply = "Following are the details of the latest update on the incident: - <br> **Updated On:** "+updated_on+"<br> **Updated By:** "+updated_by+"<br> **"+element+":** "+updated_value
-            
+            reply = "Following are the details of the latest update on the incident: - <br> **Updated On:** "\
+                +updated_on+"<br> **Updated By:** "+updated_by+"<br> **"+element+":** "+updated_value
+
             dispatcher.utter_message(text = reply)
 
         return []
 
 class ActionKnowledgeArticle(Action):
+    """Fetches Knowledge Article attached to the Incident from Knowledge Table in ITSM"""
 
-   def name(self) -> Text:
-      return "action_knowledge_article"
+    def name(self) -> Text:
+        return "action_knowledge_article"
 
-   def run(self,
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
         query_filter1 = '&sysparm_exclude_reference_link=True&sysparm_fields=kb_knowledge'
-        data = get_response(KNLDGtableSpec, tracker.sender_id, query_filter1)
-        if data != None:
+        data = get_response(KNLDG_TABLE_SPEC, tracker.sender_id, query_filter1)
+        if data is not None:
             if len(data) == 0:
                 knowledge_articles = "*No, there aren't any knowledge articles attached to this incident.*"
             elif len(data) == 1:
-                knowledge_articles = "Yes, there is 1 knowledge article attached to this incident. Following are the details of the article: -<br>"
+                knowledge_articles = "Yes, there is 1 knowledge article attached to this incident. "\
+                    "Following are the details of the article: -<br>"
             else:
-                knowledge_articles = "Yes, there are "+len(data)+" knowledge articles attached to this incident. Following are the details of the articles: -<br>"
+                knowledge_articles = "Yes, there are "+len(data)+" knowledge articles attached to this incident. "\
+                    "Following are the details of the articles: -<br>"
 
-            for i in range (0,len(data)):
-                sysId = data[i]['kb_knowledge']
-                article = get_article(sysId)
-                if article != None:
+            for data_item in data:
+                sys_id = data_item['kb_knowledge']
+                article = get_article(sys_id)
+                if article is not None:
                     number = article['number']
                     short_description = article['short_description']
                     view_count = article['sys_view_count']
                     use_count = article['use_count']
                     body = article['text']
-                    knowledge_articles = knowledge_articles+"[**"+number+":** *"+short_description+"*](https://dev89325.service-now.com/kb_view.do?sys_kb_id="+sysId+") <br> **View count:** "+view_count+"    **Use count:** "+use_count+"<br> *Article:*<br>"+body+"<br><br>"
+                    knowledge_articles = knowledge_articles+"[**"+number+":** *"\
+                        +short_description+"*](https://dev89325.service-now.com/kb_view.do?sys_kb_id="\
+                        +sys_id+") <br> **View count:** "+view_count+"    **Use count:** "\
+                        +use_count+"<br> *Article:*<br>"+body+"<br><br>"
 
             dispatcher.utter_message(text = knowledge_articles)
 
         return []
 
 class ActionParent(Action):
-   def name(self) -> Text:
-      return "action_parent"
+    """Fetches Parent Incident of the current Incident from Incident Table in ITSM"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_parent"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
         query_filter = '?sysparm_display_value=True&sysparm_exclude_reference_link=True&sysparm_fields=parent_incident'
-        data = get_response(INCtableSpec, tracker.sender_id, query_filter)
-        if data != None:
+        data = get_response(INC_TABLE_SPEC, tracker.sender_id, query_filter)
+        if data is not None:
             parent = data['parent_incident']
             if parent == "":
-                reply = "No. This incident is not related to any other incident."              
+                reply = "No. This incident is not related to any other incident."
             else:
                 reply = "Yes. This incident is a child incident of **"+parent+"**."
 
@@ -1170,27 +1195,31 @@ class ActionParent(Action):
         return []
 
 class ActionResolutionSummary(Action):
-   def name(self) -> Text:
-      return "action_resolution_summary"
+    """Fetches Resolution Information of the Incident from Incident Table in ITSM"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_resolution_summary"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
-        query_filter = '?sysparm_display_value=True&sysparm_exclude_reference_link=True&sysparm_fields=number,resolved_at,resolved_by,knowledge,close_code,close_notes'
-        inc_data = get_response(INCtableSpec, tracker.sender_id, query_filter)
+        query_filter = "?sysparm_display_value=True&sysparm_exclude_reference_link=True"\
+            "&sysparm_fields=number,resolved_at,resolved_by,knowledge,close_code,close_notes"
+        inc_data = get_response(INC_TABLE_SPEC, tracker.sender_id, query_filter)
 
-        if inc_data != None:
+        if inc_data:
             resolved_at = inc_data['resolved_at']
             resolved_by = inc_data['resolved_by']
             knowledge = inc_data['knowledge']
             resolution_code = inc_data['close_code']
             resolution_notes = inc_data['close_notes']
 
-            query_filter = '^sla.targetINresolution^sla.typeINSLA&sysparm_display_value=True&sysparm_exclude_reference_link=True&sysparm_fields=has_breached,business_duration'
-            sla_data = get_response(SLAtableSpec, tracker.sender_id, query_filter)
-            if sla_data != None:
+            query_filter = "^sla.targetINresolution^sla.typeINSLA&sysparm_display_value=True"\
+                "&sysparm_exclude_reference_link=True&sysparm_fields=has_breached,business_duration"
+            sla_data = get_response(SLA_TABLE_SPEC, tracker.sender_id, query_filter)
+            if sla_data is not None:
                 has_breached = sla_data[0]['has_breached']
                 business_duration = sla_data[0]['business_duration']
                 if has_breached:
@@ -1199,30 +1228,36 @@ class ActionResolutionSummary(Action):
                     sla_met = 'No'
 
                 if resolved_at == "":
-                    reply = "*This incident is not resolved yet.*"                    
+                    reply = "*This incident is not resolved yet.*"
                 else:
                     if knowledge=="true":
                         knowledge_article = "<br><br> *This resolution has been submitted to be published as knowledge article.*"
                     else:
                         knowledge_article = ""
 
-                    reply = "Following is the summary of resolution of the incident: - <br> **Resolved At:** "+resolved_at+"<br> **Resolved By:** "+resolved_by+"<br> **SLA met:** "+sla_met+"<br> **Resolution Duration:** "+business_duration+"<br> **Resolution Code:** "+resolution_code+"<br> **Resolution Notes:** "+resolution_notes+knowledge_article
+                    reply = "Following is the summary of resolution of the incident: - "\
+                        "<br> **Resolved At:** "+resolved_at+"<br> **Resolved By:** "+resolved_by+\
+                        "<br> **SLA met:** "+sla_met+"<br> **Resolution Duration:** "+business_duration+\
+                        "<br> **Resolution Code:** "+resolution_code+"<br> **Resolution Notes:** "\
+                        +resolution_notes+knowledge_article
 
                 dispatcher.utter_message(text = reply)
 
         return []
 
 class ActionAttachment(Action):
-   def name(self) -> Text:
-      return "action_attachment"
+    """Fetches Files Attached to the Incident from Attachment Table in ITSM"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_attachment"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
         data = get_attachment(tracker.sender_id)
-        if data != None:
+        if data is not None:
             if len(data) == 0:
                 dispatcher.utter_message(text = "There are no attachments for this incident.")
             else:
@@ -1230,15 +1265,16 @@ class ActionAttachment(Action):
                 for attachment in data:
                     attachment_links = attachment_links+' - ['+attachment['file_name']+']('+attachment['download_link']+')\n'
 
-                reply = "Following are the files attached to the incident:\n"+attachment_links+"\n*(Click on the ones you wish to download.)*"
-                
+                reply = "Following are the files attached to the incident:\n"\
+                    +attachment_links+"\n*(Click on the ones you wish to download.)*"
+
                 dispatcher.utter_message(text = reply)
 
         return []
 
 ################# Reminder Actions #################
 class ActionReactToSlaReminder(Action):
-    """Reminds the user to call someone."""
+    """Sends reminder for SLA breach on receiving trigger from ITSM"""
 
     def name(self) -> Text:
         return "action_react_to_sla_reminder"
@@ -1250,17 +1286,16 @@ class ActionReactToSlaReminder(Action):
         domain: Dict[Text, Any],
     ) -> List[Dict[Text, Any]]:
 
-        number = tracker.get_slot('number')
         time_left = tracker.get_slot('time_left')
         percentage = tracker.get_slot('percentage')
         chat_id = tracker.sender_id
-        
-        bot_conv_url =  bot_url+chat_id+"/activities"
+
+        bot_conv_url =  BOT_URL+chat_id+"/activities"
         bot_headers = get_bot_headers()
 
         if int(time_left.split(' ')[0]) == 0:
             alert = "*The sla has been breached!!!*"
-        else:  
+        else:
             alert = "**"+time_left+"** left for Incident Resolution. **"+percentage+"%** of SLA has been elapsed!"
 
         sla_alert = {
@@ -1313,11 +1348,11 @@ class ActionReactToSlaReminder(Action):
 
         if not sla_alert_response.ok:
             print("Error trying to send botframework message. Response: %s",sla_alert_response.text)
-        
+
         return []
 
 class ActionReactToNoUpdateReminder(Action):
-    """Reminds the user to call someone."""
+    """Sends Reminder for updating the ticket in fixed intervals"""
 
     def name(self) -> Text:
         return "action_react_to_no_update_reminder"
@@ -1333,9 +1368,9 @@ class ActionReactToNoUpdateReminder(Action):
         number = tracker.get_slot("number")
         interval = int(tracker.get_slot("no_upd_interval"))
 
-        bot_conv_url =  bot_url+chat_id+"/activities"
+        bot_conv_url =  BOT_URL+chat_id+"/activities"
         bot_headers = get_bot_headers()
-        
+
         no_update_alert = {
             "type":"message",
             "attachments": [
@@ -1403,7 +1438,8 @@ class ActionReactToNoUpdateReminder(Action):
         return [no_update_reminder]
 
 class ActionReactToEmailReminder(Action):
-    
+    """Sends Reminder for sending Email communication in fixed intervals"""
+
     def name(self) -> Text:
         return "action_react_to_email_reminder"
 
@@ -1415,7 +1451,7 @@ class ActionReactToEmailReminder(Action):
     ) -> List[Dict[Text, Any]]:
 
         chat_id = tracker.get_slot("chat_id")
-        
+
         email_alert = {
             "type": "message",
             "attachments": [
@@ -1462,25 +1498,25 @@ class ActionReactToEmailReminder(Action):
             ]
         }
 
-        bot_conv_url =  bot_url+chat_id+"/activities"
+        bot_conv_url =  BOT_URL+chat_id+"/activities"
         bot_headers = get_bot_headers()
 
         email_card_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(email_alert))
 
         if not email_card_response.ok:
             print("Error trying to send email reminder alert card. Response: %s",email_card_response.text)
-        
+
         ###### Set Email Reminder ######
-        emailUpdateTime = datetime.datetime.now() + datetime.timedelta(minutes=5)
+        email_update_time = datetime.datetime.now() + datetime.timedelta(minutes=5)
         email_update_reminder = ReminderScheduled(
             "EXTERNAL_email_reminder",
-            trigger_date_time=emailUpdateTime,
+            trigger_date_time=email_update_time,
             entities={"chat_id": chat_id},
             name="email_update_rem",
             kill_on_user_message=False,
         )
 
-        print("\n\nEmail Update DateTime :: ",emailUpdateTime)
+        print("\n\nEmail Update DateTime :: ",email_update_time)
         print("~~~~~~~~~~~~Email Update Reminder is Set~~~~~~~~~~~~~~")
 
         return [email_update_reminder]
@@ -1488,10 +1524,12 @@ class ActionReactToEmailReminder(Action):
 ############### Data Push Actions #################
 
 class ActionUtterWorknoteCard(Action):
-   def name(self) -> Text:
-      return "action_utter_worknote_card"
+    """Sends card for updating the worknote"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_utter_worknote_card"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
@@ -1505,13 +1543,13 @@ class ActionUtterWorknoteCard(Action):
                         "type": "AdaptiveCard",
                         "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
                         "version": "1.2",
-                        "body": [         
+                        "body": [
                             {
                                 "type": "TextBlock",
                                 "text": "Worknote",
                                 "size": "Medium",
                                 "weight": "Bolder"
-                            },           
+                            },
                             {
                                 "type": "Input.Text",
                                 "placeholder": "Enter the note.",
@@ -1530,7 +1568,7 @@ class ActionUtterWorknoteCard(Action):
                                     {
                                         "type": "Action.Submit",
                                         "title": "Update",
-                                        "data": { 
+                                        "data": {
                                             "msteams": {
                                                 "type": "messageBack",
                                                 "text": "User interaction with worknote card"
@@ -1547,26 +1585,27 @@ class ActionUtterWorknoteCard(Action):
         }
 
         dispatcher.utter_message(json_message=worknote_card)
-  
+
         return []
 
 class ActionUpdateWorknote(Action):
-   def name(self) -> Text:
-      return "action_update_worknote"
+    """Updates the worknote on receiving response from worknote card"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_update_worknote"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
-        f = open("card_data.txt", "r+")
-        value = f.readline().split('\n')[0]
-        value = json.loads(value)
-        user = f.readline().split('\n')[0]
-        activityId = f.readline() 
-        f.seek(0)
-        f.truncate()
-        f.close()
+        with open("card_data.txt", "r+", encoding='utf8') as file:
+            value = file.readline().split('\n')[0]
+            value = json.loads(value)
+            user = file.readline().split('\n')[0]
+            activity_id = file.readline()
+            file.seek(0)
+            file.truncate()
 
         if 'note' in value:
             wk_note = value['note']+"\n\n- Update given by: "+user+" via IIM"
@@ -1577,11 +1616,11 @@ class ActionUpdateWorknote(Action):
 
             query_filter = '?sysparm_fields=work_notes,comments'
             data = json.dumps(data)
- 
-            response_status, response_data = put_response(INCtableSpec, tracker.sender_id, query_filter, data)
 
-            if response_status != None:
-                update_activity(tracker.sender_id,activityId,user)
+            response_status = put_response(INC_TABLE_SPEC, tracker.sender_id, query_filter, data)
+
+            if response_status:
+                update_activity(tracker.sender_id,activity_id,user)
 
         else:
             dispatcher.utter_message(text='Please enter the note before submitting.')
@@ -1589,15 +1628,17 @@ class ActionUpdateWorknote(Action):
         return []
 
 class ActionUtterAssignmentCard(Action):
-   def name(self) -> Text:
-      return "action_utter_assignment_card"
+    """Sends card for updating the Engineer and Assignment Group"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_utter_assignment_card"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
-        choiceList = get_groups()
+        choice_list = get_groups()
 
         assignment_card = {
             "attachments":[
@@ -1617,7 +1658,7 @@ class ActionUtterAssignmentCard(Action):
                             },
                             {
                                 "type": "Input.ChoiceSet",
-                                "choices": choiceList,
+                                "choices": choice_list,
                                 "placeholder": "Select a group",
                                 "id": "group"
                             },
@@ -1633,7 +1674,7 @@ class ActionUtterAssignmentCard(Action):
                                     {
                                         "type": "Action.Submit",
                                         "title": "Update",
-                                        "data": { 
+                                        "data": {
                                             "msteams": {
                                                 "type": "messageBack",
                                                 "text": "User interaction with assignment card"
@@ -1650,39 +1691,43 @@ class ActionUtterAssignmentCard(Action):
         }
 
         dispatcher.utter_message(json_message=assignment_card)
-  
+
         return []
 
 class ActionUpdateAssignment(Action):
-   def name(self) -> Text:
-      return "action_update_assignment"
+    """Updates the assignment fields on receiving response from assignment card"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_update_assignment"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
-        f = open("card_data.txt", "r+")
-        value = f.readline().split('\n')[0]
-        value = json.loads(value)
-        user = f.readline().split('\n')[0]
-        activityId = f.readline() 
-        f.seek(0)
-        f.truncate()
-        f.close()
+        with open("card_data.txt", "r+", encoding='utf8') as file:
+            value = file.readline().split('\n')[0]
+            value = json.loads(value)
+            user = file.readline().split('\n')[0]
+            activity_id = file.readline()
+            file.seek(0)
+            file.truncate()
 
         if 'engineer' in value:
             data = {
                     "assigned_to": value['engineer']
                 }
             if 'group' in value:
-                work_note = "The assignment group has been changed to "+ value['group']+" and the ticket has been assigned to "+value['engineer'] + "\n\n- Update given by: "+user+" via IIM"
+                work_note = "The assignment group has been changed to "+ value['group']\
+                    +" and the ticket has been assigned to "+value['engineer'] \
+                    +"\n\n- Update given by: "+user+" via IIM"
                 data["assignment_group"] = value['group']
             else:
                 work_note = "The ticket has been assigned to "+ value['engineer'] + "\n\n- Update given by: "+user+" via IIM"
             data["work_notes"] = work_note
-            
-            query_filter = '?sysparm_display_value=True&sysparm_exclude_reference_link=True&sysparm_fields=assigned_to,assignment_group'
+
+            query_filter = "?sysparm_display_value=True&sysparm_exclude_reference_link=True"\
+                "&sysparm_fields=assigned_to,assignment_group"
 
         elif 'group' in value:
             work_note = "The assignment group has been changed to "+ value['group']+"\n\n- Update given by: "+user+" via IIM"
@@ -1696,28 +1741,30 @@ class ActionUpdateAssignment(Action):
             dispatcher.utter_message(text='Please mention the group and/or engineer you want to assign the ticket to.')
             return []
 
-        response_status, response_data = put_response(INCtableSpec, tracker.sender_id, query_filter, json.dumps(data))
+        response_status = put_response(INC_TABLE_SPEC, tracker.sender_id, query_filter, json.dumps(data))
 
         if response_status == 403:
             dispatcher.utter_message(text="The entered Engineer either does not exist or does not belong to the current Assignment Group.")
             dispatcher.utter_message(text="*Change the assignment group first if the engineer belongs to another group.")
             dispatcher.utter_message(text="Ticket update cancelled.")
-        elif response_status != None:
-            update_activity(tracker.sender_id,activityId,user)
+        elif response_status:
+            update_activity(tracker.sender_id,activity_id,user)
 
         return []
 
 class ActionUtterStateCard(Action):
-   def name(self) -> Text:
-      return "action_utter_state_card"
+    """Sends card for updating the Incident State"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_utter_state_card"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
         query_filter = '?sysparm_display_value=True&sysparm_fields=state'
-        data = get_response(INCtableSpec, tracker.sender_id, query_filter)
+        data = get_response(INC_TABLE_SPEC, tracker.sender_id, query_filter)
         current_state = data['state']
 
         state_card = {
@@ -1747,7 +1794,7 @@ class ActionUtterStateCard(Action):
                                     {
                                         "type": "Action.Submit",
                                         "title": "In Progress",
-                                        "data": { 
+                                        "data": {
                                             "msteams": {
                                                 "type": "messageBack",
                                                 "text": "User interaction with state card : In Progress"
@@ -1779,7 +1826,7 @@ class ActionUtterStateCard(Action):
                                                             "items": [
                                                                 {
                                                                     "type": "TextBlock",
-                                                                    "text": "\*",
+                                                                    "text": r"\*",
                                                                     "color": "Warning"
                                                                 }
                                                             ],
@@ -1831,7 +1878,7 @@ class ActionUtterStateCard(Action):
                                                         {
                                                             "type": "Action.Submit",
                                                             "title": "Confirm On Hold State",
-                                                            "data": { 
+                                                            "data": {
                                                                 "msteams": {
                                                                     "type": "messageBack",
                                                                     "text": "User interaction with state card : On Hold"
@@ -1869,7 +1916,7 @@ class ActionUtterStateCard(Action):
                                                             "items": [
                                                                 {
                                                                     "type": "TextBlock",
-                                                                    "text": "\*",
+                                                                    "text": r"\*",
                                                                     "color": "Warning"
                                                                 }
                                                             ],
@@ -1931,7 +1978,7 @@ class ActionUtterStateCard(Action):
                                                             "items": [
                                                                 {
                                                                     "type": "TextBlock",
-                                                                    "text": "\*",
+                                                                    "text": r"\*",
                                                                     "color": "Warning"
                                                                 }
                                                             ],
@@ -1952,7 +1999,7 @@ class ActionUtterStateCard(Action):
                                                         {
                                                             "type": "Action.Submit",
                                                             "title": "Confirm Resolve State",
-                                                            "data": { 
+                                                            "data": {
                                                             "msteams": {
                                                                 "type": "messageBack",
                                                                 "text": "User interaction with state card : Resolved"
@@ -1983,33 +2030,35 @@ class ActionUtterStateCard(Action):
         return []
 
 class ActionUpdateState(Action):
-   def name(self) -> Text:
-      return "action_update_state"
+    """Updates the incident state on receiving response from state card"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_update_state"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
-        f = open("card_data.txt", "r+")
-        value = f.readline().split('\n')[0]
-        value = json.loads(value)
-        user = f.readline().split('\n')[0]
-        activityId = f.readline() 
-        f.seek(0)
-        f.truncate()
-        f.close()
+        with open("card_data.txt", "r+", encoding='utf8') as file:
+            value = file.readline().split('\n')[0]
+            value = json.loads(value)
+            user = file.readline().split('\n')[0]
+            activity_id = file.readline()
+            file.seek(0)
+            file.truncate()
 
         query_filter = '?sysparm_display_value=True&sysparm_fields=state'
-        data = get_response(INCtableSpec, tracker.sender_id, query_filter)
+        data = get_response(INC_TABLE_SPEC, tracker.sender_id, query_filter)
         from_state = data['state']
         to_state = tracker.get_slot('new_state')
 
         if to_state == from_state:
             dispatcher.utter_message(text="The incident is already in the selected state.")
             return []
-            
-        work_note = "The ticket state has been changed from *" + from_state + "* to *"+ to_state + "* \n\n- Update given by: "+user+" via IIM"
+
+        work_note = "The ticket state has been changed from *" + from_state + "* to *"\
+            + to_state + "* \n\n- Update given by: "+user+" via IIM"
         data = {
             "state": to_state,
             "work_notes": work_note
@@ -2022,62 +2071,69 @@ class ActionUpdateState(Action):
                     if 'comment' in value:
                         data['comments'] = value['comment']
                     else:
-                        dispatcher.utter_message(text="Please enter the note for Caller if putting the ticket on hold and reason is Awaiting Caller")
+                        dispatcher.utter_message(
+                            text="Please enter the note for Caller if putting the ticket on hold and "\
+                                "reason is Awaiting Caller"
+                        )
                         return []
             else:
                 dispatcher.utter_message(text="Please select the reason for changing the ticket state to 'On Hold'")
                 return []
         elif to_state == "Resolved":
-            if 'code' and 'close_notes' in value:
+            if value.keys() >= {"code","close_notes"}:
                 data['close_code'] = value['code']
-                data['close_notes'] = value['close_notes']                            
+                data['close_notes'] = value['close_notes']
             else:
                 dispatcher.utter_message(text="Please fill both the mandatory fields for changing the ticket state to resolved.")
                 return []
 
         query_filter = '?sysparm_display_value=True&sysparm_exclude_reference_link=True&sysparm_fields=state'
 
-        response_status, response_data = put_response(INCtableSpec, tracker.sender_id, query_filter, json.dumps(data))
+        response_status = put_response(INC_TABLE_SPEC, tracker.sender_id, query_filter, json.dumps(data))
 
-        if response_status != None:
-                update_activity(tracker.sender_id,activityId,user)
+        if response_status:
+            update_activity(tracker.sender_id,activity_id,user)
 
         return []
 
 class ActionUploadFile(Action):
-   def name(self) -> Text:
-      return "action_upload_file"
+    """Attaches the uploaded file to the Incident in ITSM"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_upload_file"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
-        f = open("card_data.txt", "r+")
-        content_url = f.readline().split('\n')[0]
-        user = f.readline() 
-        f.seek(0)
-        f.truncate()
-        f.close()
+        with open("card_data.txt", "r+", encoding='utf8') as file:
+            content_url = file.readline().split('\n')[0]
+            user = file.readline()
+            file.seek(0)
+            file.truncate()
 
-        if content_url == "":
+        if not content_url:
             dispatcher.utter_message(text="No File Attached. Upload Failed!")
         else:
             now = datetime.datetime.now().strftime("%d%m%Y%H%M%S")
             file_data, file_extension = get_file_content(content_url)
             print("File Type: ",file_extension)
-            if file_extension == None:
+            if file_extension is None:
                 dispatcher.utter_message(text="Only JPEG and PNG file types are supported.")
                 return []
-            
+
             file_name = "Attachment_"+now+"."+file_extension
-            response_data = post_attachment(tracker.sender_id,file_name,file_data)
+            response = post_attachment(tracker.sender_id,file_name,file_data)
+            if response is None:
+                dispatcher.utter_message(text='File Upload Failed! Please try again.')
+                return []
 
             ##### Updating the worknote #####
             worknote = "A File has been attached to the incident."+" \n\n - Uploaded by: "+user+" via IIM"
-            data = {"work_notes": worknote}           
+            data = {"work_notes": worknote}
             query_filter = '?sysparm_fields=work_notes'
-            response_status, response_data = put_response(INCtableSpec, tracker.sender_id, query_filter, json.dumps(data))
+            response_status = put_response(INC_TABLE_SPEC, tracker.sender_id, query_filter, json.dumps(data))
 
             if response_status not in [None, 403]:
                 dispatcher.utter_message(text="The file has been attached to the incident.")
@@ -2087,7 +2143,8 @@ class ActionUploadFile(Action):
 ###### Email Notification Action #########
 
 class ActionUtterEmailUpdateCard(Action):
-    
+    """Sends card for Email communication"""
+
     def name(self) -> Text:
         return "action_utter_email_update_card"
 
@@ -2098,8 +2155,6 @@ class ActionUtterEmailUpdateCard(Action):
         domain: Dict[Text, Any],
     ) -> List[Dict[Text, Any]]:
 
-        global bot_url, email_slots 
-
         chat_id = tracker.sender_id
 
         old_email_upd_card_id = tracker.get_slot("emailUpdCardId")
@@ -2107,30 +2162,31 @@ class ActionUtterEmailUpdateCard(Action):
         bot_headers = get_bot_headers()
 
         if old_email_upd_card_id is not None:
-            bot_delete_url =  bot_url+chat_id+"/activities/"+old_email_upd_card_id
+            bot_delete_url =  BOT_URL+chat_id+"/activities/"+old_email_upd_card_id
             card_delete_response = requests.delete(bot_delete_url, headers=bot_headers)
             if not card_delete_response.ok:
                 print("Error trying to delete Email Update Card. Response: %s",card_delete_response.text)
 
         if old_email_det_card_id is not None:
-            bot_delete_url =  bot_url+chat_id+"/activities/"+old_email_det_card_id
+            bot_delete_url =  BOT_URL+chat_id+"/activities/"+old_email_det_card_id
             card_delete_response = requests.delete(bot_delete_url, headers=bot_headers)
             if not card_delete_response.ok:
                 print("Error trying to delete Email Details Card. Response: %s",card_delete_response.text)
-        
-        es_dict = {}
-        
-        for es in email_slots:
-            es_dict[es] = tracker.get_slot(es)
 
-        subject = "MIM - "+es_dict['EImpClient']+" - "+es_dict['Epriority']+"| "+es_dict['Emistate']+" | <"+es_dict['EImpApp']+"> | "+es_dict['EIncRef']+" | "+es_dict['EIncSummary']
+        es_dict = {}
+
+        for es_val in EMAIL_SLOTS:
+            es_dict[es_val] = tracker.get_slot(es_val)
+
+        subject = "MIM - "+es_dict['EImpClient']+" - "+es_dict['Epriority']+"| "+es_dict['Emistate']+" | <"\
+            +es_dict['EImpApp']+"> | "+es_dict['EIncRef']+" | "+es_dict['EIncSummary']
 
         email_update_card = {
             "type": "message",
             "attachments": [
                 {
                     "contentType": "application/vnd.microsoft.card.adaptive",
-                    "content": 
+                    "content":
                     {
                         "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
                         "type": "AdaptiveCard",
@@ -2303,19 +2359,20 @@ class ActionUtterEmailUpdateCard(Action):
                 }
             ]
         }
-        
-        bot_conv_url =  bot_url+chat_id+"/activities"
+
+        bot_conv_url =  BOT_URL+chat_id+"/activities"
         bot_headers = get_bot_headers()
 
         email_card_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(email_update_card))
 
         if not email_card_response.ok:
             print("Error trying to send email update card. Response: %s",email_card_response.text)
-        
+
         return [SlotSet("emailUpdCardId",email_card_response.json()['id']), SlotSet('emailDetCardId', None)]
 
 class ActionUtterEmailDetailsCard(Action):
-    
+    """Sends card for updating Email Details"""
+
     def name(self) -> Text:
         return "action_utter_email_details_card"
 
@@ -2326,8 +2383,6 @@ class ActionUtterEmailDetailsCard(Action):
         domain: Dict[Text, Any],
     ) -> List[Dict[Text, Any]]:
 
-        global bot_url, email_slots 
-
         chat_id = tracker.sender_id
 
         old_email_upd_card_id = tracker.get_slot("emailUpdCardId")
@@ -2335,21 +2390,21 @@ class ActionUtterEmailDetailsCard(Action):
         bot_headers = get_bot_headers()
 
         if old_email_upd_card_id is not None:
-            bot_delete_url =  bot_url+chat_id+"/activities/"+old_email_upd_card_id
+            bot_delete_url =  BOT_URL+chat_id+"/activities/"+old_email_upd_card_id
             card_delete_response = requests.delete(bot_delete_url, headers=bot_headers)
             if not card_delete_response.ok:
                 print("Error trying to delete Email Update Card. Response: %s",card_delete_response.text)
 
         if old_email_det_card_id is not None:
-            bot_delete_url =  bot_url+chat_id+"/activities/"+old_email_det_card_id
+            bot_delete_url =  BOT_URL+chat_id+"/activities/"+old_email_det_card_id
             card_delete_response = requests.delete(bot_delete_url, headers=bot_headers)
             if not card_delete_response.ok:
                 print("Error trying to delete Email Details Card. Response: %s",card_delete_response.text)
-        
+
         es_dict = {}
-        
-        for es in email_slots:
-            es_dict[es] = tracker.get_slot(es)
+
+        for es_val in EMAIL_SLOTS:
+            es_dict[es_val] = tracker.get_slot(es_val)
 
         email_details_card = {
             "type": "message",
@@ -2830,19 +2885,20 @@ class ActionUtterEmailDetailsCard(Action):
                 }
             ]
         }
-        
-        bot_conv_url =  bot_url+chat_id+"/activities"
+
+        bot_conv_url =  BOT_URL+chat_id+"/activities"
         bot_headers = get_bot_headers()
 
         email_card_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(email_details_card))
 
         if not email_card_response.ok:
             print("Error trying to send email details card. Response: %s",email_card_response.text)
-        
+
         return [SlotSet("emailDetCardId",email_card_response.json()['id']), SlotSet('emailUpdCardId', None)]
 
 class ActionSaveEmailDetails(Action):
-    
+    """Stores the email details card values in slots"""
+
     def name(self) -> Text:
         return "action_save_email_details"
 
@@ -2852,14 +2908,13 @@ class ActionSaveEmailDetails(Action):
 
         chat_id = tracker.sender_id
 
-        f = open("card_data.txt", "r+")
-        value = f.readline().split('\n')[0]
-        value = json.loads(value)
-        user = f.readline().split('\n')[0]
-        activityId = f.readline() 
-        f.seek(0)
-        f.truncate()
-        f.close()
+        with open("card_data.txt", "r+", encoding='utf8') as file:
+            value = file.readline().split('\n')[0]
+            value = json.loads(value)
+            user = file.readline().split('\n')[0]
+            activity_id = file.readline()
+            file.seek(0)
+            file.truncate()
 
         if value['Emistate'] != 'Resolved':
             try:
@@ -2870,9 +2925,9 @@ class ActionSaveEmailDetails(Action):
             except ValueError:
                 dispatcher.utter_message(text="Please enter the Next Update in proper format (For eg. 13-Dec-2021 01:30)")
                 return []
-        
+
         return_events_list = []
-        
+
         email_events = [
             SlotSet('Epriority', value['Epriority']),
             SlotSet('Emistate', value['Emistate']),
@@ -2899,17 +2954,18 @@ class ActionSaveEmailDetails(Action):
         ]
 
         return_events_list.extend(email_events)
-        
+
         if value['init_com'] == "true":
-                
-            subject = "MIM - "+value['EImpClient']+" - "+value['Epriority']+"| "+value['Emistate']+" | <"+value['EImpApp']+"> | "+value['EIncRef']+" | "+value['EIncSummary']
+
+            subject = "MIM - "+value['EImpClient']+" - "+value['Epriority']+"| "+value['Emistate']+" | <"\
+                +value['EImpApp']+"> | "+value['EIncRef']+" | "+value['EIncSummary']
 
             email_update_card = {
                 "type": "message",
                 "attachments": [
                     {
                         "contentType": "application/vnd.microsoft.card.adaptive",
-                        "content": 
+                        "content":
                         {
                             "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
                             "type": "AdaptiveCard",
@@ -3082,84 +3138,89 @@ class ActionSaveEmailDetails(Action):
                     }
                 ]
             }
-            
-            bot_conv_url =  bot_url+chat_id+"/activities"
+
+            bot_conv_url =  BOT_URL+chat_id+"/activities"
             bot_headers = get_bot_headers()
 
             email_card_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(email_update_card))
 
             if not email_card_response.ok:
                 print("Error trying to send email update card. Response: %s",email_card_response.text)
-            
+
             return_events_list.extend([SlotSet("emailUpdCardId",email_card_response.json()['id'])])
 
             if value['Erem_flag'] == "true":
                 return_events_list.extend([SlotSet('Erem_flag','true')])
-                emailUpdateTime = datetime.datetime.now() + datetime.timedelta(minutes=2)
+                email_update_time = datetime.datetime.now() + datetime.timedelta(minutes=2)
                 email_update_reminder = ReminderScheduled(
                     "EXTERNAL_email_reminder",
-                    trigger_date_time=emailUpdateTime,
+                    trigger_date_time=email_update_time,
                     entities={"chat_id": chat_id},
                     name="email_update_rem",
                     kill_on_user_message=False,
                 )
 
-                print("\n\nEmail Update DateTime :: ",emailUpdateTime)
+                print("\n\nEmail Update DateTime :: ",email_update_time)
                 print("~~~~~~~~~~~~Email Update Reminder is Set~~~~~~~~~~~~~~")
-        
+
                 dispatcher.utter_message(text="Email Notification reminder is set by "+user+". You will be reminded in 5 minutes.")
                 return_events_list.extend([email_update_reminder])
             else:
                 return_events_list.extend([SlotSet('Erem_flag','false')])
         else:
-            if value['Emistate'] != 'Resolved' and tracker.get_slot('Erem_flag') == 'true' and tracker.get_slot('ENxtUpd') != value['ENxtUpd']:
+            if (
+                value['Emistate'] != 'Resolved'
+                and tracker.get_slot('Erem_flag') == 'true'
+                and tracker.get_slot('ENxtUpd') != value['ENxtUpd']
+            ):
                 ###### Set Email Reminder #######
-                emailUpdateTime = next_update - datetime.timedelta(minutes=5)
+                email_update_time = next_update - datetime.timedelta(minutes=5)
                 email_update_reminder = ReminderScheduled(
                     "EXTERNAL_email_reminder",
-                    trigger_date_time=emailUpdateTime,
+                    trigger_date_time=email_update_time,
                     entities={"chat_id": chat_id},
                     name="email_update_rem",
                     kill_on_user_message=False,
                 )
 
-                print("\n\nEmail Update DateTime :: ",emailUpdateTime)
+                print("\n\nEmail Update DateTime :: ",email_update_time)
                 print("~~~~~~~~~~~~Email Update Reminder is Set~~~~~~~~~~~~~~")
                 return_events_list.extend([email_update_reminder])
 
         return_events_list.extend([SlotSet('emailDetCardId',None)])
-        update_activity(chat_id,activityId,user,card_content = "Email Details have been saved.")
-        
+        update_activity(chat_id,activity_id,user,card_content = "Email Details have been saved.")
+
         return return_events_list
 
 class ActionSendEmail(Action):
-   def name(self) -> Text:
-      return "action_send_email"
+    """Sends email on receiving response from Email Update Card"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_send_email"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
         chat_id = tracker.sender_id
         return_events_list = []
-         
-        f = open("card_data.txt", "r+")
-        value = f.readline().split('\n')[0]
-        value = json.loads(value)
-        user = f.readline().split('\n')[0]
-        activityId = f.readline() 
-        f.seek(0)
-        f.truncate()
-        f.close()
 
-        if 'latest_update' and 'ESub' in value:
+        with open("card_data.txt", "r+", encoding='utf8') as file:
+            value = file.readline().split('\n')[0]
+            value = json.loads(value)
+            user = file.readline().split('\n')[0]
+            activity_id = file.readline()
+            file.seek(0)
+            file.truncate()
+
+        if value.keys() >= {"latest_update", "ESub"}:
             latest_update = value['latest_update']
             subject = value['ESub']
         else:
             dispatcher.utter_message(text='Please enter values in both fields before submitting.')
             return []
-        
+
         ##### Formatting the update in email template #####
         email_update_history = tracker.get_slot("emailUpdateHistory")
         current_timestamp = datetime.datetime.now().strftime("%d-%b-%Y %H:%M")
@@ -3170,24 +3231,25 @@ class ActionSendEmail(Action):
 
         ##### Extracting Email Details from Slots #####
         es_dict = {}
-        
-        for es in email_slots:
-            es_dict[es] = tracker.get_slot(es)
+
+        for es_val in EMAIL_SLOTS:
+            es_dict[es_val] = tracker.get_slot(es_val)
 
         ######## Store the update in the Database #########
-        q ="INSERT INTO email_updates VALUES ('{0}','{1}','{2}','{3}')".format(tracker.get_slot('number'),current_timestamp,latest_update,es_dict['EMIM'])
-        result = ENGINE.execute(q)
-        
+        query = f"INSERT INTO email_updates VALUES ('{tracker.get_slot('number')}',"\
+            f"'{current_timestamp}','{latest_update}','{es_dict['EMIM']}')"
+        ENGINE.execute(query)
+
         ####### Send Email Notification #######
         print("****** SEND EMAIL ******")
         mail_sent = send_email_notification(tracker.sender_id, consolidated_update, subject, es_dict)
 
         if mail_sent == "Success":
-            update_activity(chat_id,activityId,user,card_content = "Email Sent to Stakeholders.")
+            update_activity(chat_id,activity_id,user,card_content = "Email Sent to Stakeholders.")
         else:
             dispatcher.utter_message("Some problem occurred while sending the Email.")
             return []
-        
+
         nxt_upd_due = datetime.datetime.strptime(es_dict['ENxtUpd'],'%d-%b-%Y %H:%M')
         # next_update = datetime.datetime.now() + datetime.timedelta(minutes=30)
         # nxt_upd_due = next_update.strftime("%d-%b-%Y %H:%M")
@@ -3196,23 +3258,23 @@ class ActionSendEmail(Action):
 
         if es_dict["Emistate"] == 'Declared' and tracker.get_slot('Erem_flag') == 'true':
             ###### Set Email Reminder #######
-            emailUpdateTime = nxt_upd_due - datetime.timedelta(minutes=5)
+            email_update_time = nxt_upd_due - datetime.timedelta(minutes=5)
             email_update_reminder = ReminderScheduled(
                 "EXTERNAL_email_reminder",
-                trigger_date_time=emailUpdateTime,
+                trigger_date_time=email_update_time,
                 entities={"chat_id": chat_id},
                 name="email_update_rem",
                 kill_on_user_message=False,
             )
 
-            print("\n\nEmail Update DateTime :: ",emailUpdateTime)
+            print("\n\nEmail Update DateTime :: ",email_update_time)
             print("~~~~~~~~~~~~Email Update Reminder is Set~~~~~~~~~~~~~~")
             return_events_list.extend([email_update_reminder])
-        
+
         return return_events_list
 
 class ActionSetEmailReminder(Action):
-    """Sets email reminders."""
+    """Sets email reminder"""
 
     def name(self) -> Text:
         return "action_set_email_reminder"
@@ -3225,26 +3287,29 @@ class ActionSetEmailReminder(Action):
         if erem == 'true':
             dispatcher.utter_message(text="Email Reminder is already set.")
             return []
-        else:
-            ###### Set Email Reminder #######
-            next_update = datetime.datetime.strptime(tracker.get_slot('ENxtUpd'),'%d-%b-%Y %H:%M')
-            emailUpdateTime = next_update - datetime.timedelta(minutes=5)
-            email_update_reminder = ReminderScheduled(
-                "EXTERNAL_email_reminder",
-                trigger_date_time=emailUpdateTime,
-                entities={"chat_id": tracker.sender_id},
-                name="email_update_rem",
-                kill_on_user_message=False,
-            )
 
-            print("\n\nEmail Update DateTime :: ",emailUpdateTime)
-            print("~~~~~~~~~~~~Email Update Reminder is Set~~~~~~~~~~~~~~")
+        ###### Set Email Reminder #######
+        next_update = datetime.datetime.strptime(tracker.get_slot('ENxtUpd'),'%d-%b-%Y %H:%M')
+        email_update_time = next_update - datetime.timedelta(minutes=5)
+        email_update_reminder = ReminderScheduled(
+            "EXTERNAL_email_reminder",
+            trigger_date_time=email_update_time,
+            entities={"chat_id": tracker.sender_id},
+            name="email_update_rem",
+            kill_on_user_message=False,
+        )
 
-            dispatcher.utter_message(text="Email Reminder has been set! You will recieve the reminder 5 mins prior to the next scheduled email update.")
-            return [SlotSet("Erem_flag","true"), email_update_reminder]
+        print("\n\nEmail Update DateTime :: ",email_update_time)
+        print("~~~~~~~~~~~~Email Update Reminder is Set~~~~~~~~~~~~~~")
+
+        dispatcher.utter_message(
+            text="Email Reminder has been set! "\
+                "You will recieve the reminder 5 mins prior to the next scheduled email update."
+        )
+        return [SlotSet("Erem_flag","true"), email_update_reminder]
 
 class ActionCancelEmailReminder(Action):
-    """Cancels email reminder."""
+    """Cancels email reminder"""
 
     def name(self) -> Text:
         return "action_cancel_email_reminder"
@@ -3254,40 +3319,43 @@ class ActionCancelEmailReminder(Action):
     ) -> List[Dict[Text, Any]]:
 
         dispatcher.utter_message("The Email Reminder is Cancelled!.")
-        
+
         print("\n\n Cancelling Email Reminder.....")
-        
+
         return [ReminderCancelled("email_update_rem")]
 
 ###### MIR Generation Action #########
 
 class ActionGenerateMIR(Action):
-   def name(self) -> Text:
-      return "action_generate_MIR"
+    """Populates MIR Template with values and upload it to Sharepoint Site"""
 
-   def run(self,
+    def name(self) -> Text:
+        return "action_generate_MIR"
+
+    async def run(self,
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
-
-        global INCtableSpec, headers, tenant, siteId, siteName, folder
 
         template = "MIR_Template.docx"
         document = MailMerge(template)
 
         es_dict = {}
-        for es in email_slots:
-            es_dict[es] = tracker.get_slot(es)
+        for es_val in EMAIL_SLOTS:
+            es_dict[es_val] = tracker.get_slot(es_val)
 
         query_filter = '?sysparm_display_value=True&sysparm_exclude_reference_link=True&sysparm_fields=description,problem_id'
-        data = get_response(INCtableSpec, tracker.sender_id, query_filter)
-        if data != None:
+        data = get_response(INC_TABLE_SPEC, tracker.sender_id, query_filter)
+        if data is not None:
             description = data['description']
             problem_ref = data['problem_id']
         else:
             description = ""
-            problem_ref = ""
+            problem_ref = "NA"
 
+        if not problem_ref:
+            problem_ref = "NA"
+            
         document.merge(
             incident_summary=es_dict['EIncSummary'],
             incident_description=description,
@@ -3313,8 +3381,8 @@ class ActionGenerateMIR(Action):
         )
 
         ###### Get updates from Database ##########
-        q = "SELECT * from email_updates where number='{0}'".format(tracker.get_slot('number'))
-        result = ENGINE.execute(q)
+        query = f"SELECT * from email_updates where number='{tracker.get_slot('number')}'"
+        result = ENGINE.execute(query)
         sig_events = []
         for res_row in result:
             table_row = {
@@ -3328,29 +3396,29 @@ class ActionGenerateMIR(Action):
 
         document.write('MIR-output.docx')
 
-        f = open('MIR-output.docx', 'rb')
-        fileContent = f.read()
+        file = open('MIR-output.docx', 'rb')
+        file_content = file.read()
 
         number = tracker.get_slot('number')
-        fileName = 'MIR_' + number + '.docx'
-        url = "https://graph.microsoft.com/v1.0/sites/{0}/drive/items/root:/{1}/{2}:/content".format(siteId, folder, fileName)
+        file_name = 'MIR_' + number + '.docx'
+        url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/drive/items/root:/{FOLDER}/{file_name}:/content"
 
-        while(True):
-            response = requests.put(url, headers=headers, data=fileContent)
+        while True:
+            response = requests.put(url, headers=actions.globals.HEADERS, data=file_content)
             if response.status_code == 401:
                 print("Token Expired.....Refreshing Token")
-                headers = refresh_token()
+                refresh_token()
             elif response.ok:
-                webUrl = response.json()['webUrl']
-                downloadUrl = response.json()['@microsoft.graph.downloadUrl'].split('?')[0]
-                downloadUrl = downloadUrl + "?SourceUrl=https://"+tenant+".sharepoint.com/sites/"+siteName+"/Shared%20Documents/"+folder+"/"+fileName
+                web_url = response.json()['webUrl']
+                download_url = response.json()['@microsoft.graph.downloadUrl'].split('?')[0]
+                download_url = download_url + "?SourceUrl=https://"+TENANT+".sharepoint.com/sites/"+SITE_NAME+"/Shared%20Documents/"+FOLDER+"/"+file_name
                 print("*****File Uploaded Successfully*****")
                 break
             else:
                 print('Status:', response.status_code, 'Headers:', response.headers, 'Error Response:',response.json())
                 return []
 
-        MIR_card = {
+        mir_card = {
             "attachments":[
                 {
                     "contentType": "application/vnd.microsoft.card.adaptive",
@@ -3373,12 +3441,12 @@ class ActionGenerateMIR(Action):
                                     {
                                         "type": "Action.OpenUrl",
                                         "title": "View Report",
-                                        "url": webUrl
+                                        "url": web_url
                                     },
                                     {
                                         "type": "Action.OpenUrl",
                                         "title": "Download Report",
-                                        "url": downloadUrl
+                                        "url": download_url
                                     }
                                 ],
                                 "horizontalAlignment": "Center"
@@ -3389,6 +3457,6 @@ class ActionGenerateMIR(Action):
             ]
         }
 
-        dispatcher.utter_message(json_message=MIR_card)
-  
+        dispatcher.utter_message(json_message=mir_card)
+
         return []
