@@ -2,16 +2,18 @@
 This file contains functions for email notification feature.
 """
 
-# import smtplib
-# from email.mime.text import MIMEText
-# from email.mime.multipart import MIMEMultipart
-# from email.utils import formataddr
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
+from email.utils import formataddr
 
 import json
 from string import Template
 import requests
 
 from actions.requester import ENGINE
+from actions.constants import SENDER_ADDRESS, SENDER_NAME, PASSWORD
 
 # Set the request parameters
 URL = 'https://dev60561.service-now.com/api/now/v1/email'
@@ -71,8 +73,11 @@ def send_email_notification(chat_id: str, updates: str, subject: str, es_dict: d
 
     ######## Creating and Sending Email using SNOW SMTP########
     #recipients = get_recipients()
-    recipients = es_dict['EDL'].split(',')
-    print('DL :: ', es_dict['EDL'], ' :: ', type(es_dict['EDL']))
+    try:
+        recipients = es_dict['EDL'].split(',')
+        print('DL :: ', es_dict['EDL'], ' :: ', type(es_dict['EDL']))
+    except:
+        return "No DL"
 
     data = {
         "to": recipients,
@@ -121,8 +126,38 @@ def send_email_notification(chat_id: str, updates: str, subject: str, es_dict: d
     # # Create secure connection with server and send email
     # s.send_message(mail)
 
-    # #print(mail_body)
+def send_mir(filename: str):
+    """Sends mir to the stakeholders"""
 
+    ######## Creating and Sending Email with MIR as attachment using Office365 SMTP ########
+    smtp = smtplib.SMTP(host='smtp.office365.com', port=587)
+    smtp.starttls()
+    smtp.login(SENDER_ADDRESS, PASSWORD)
+
+    msg = MIMEMultipart()
+    msg['From'] = formataddr((SENDER_NAME, SENDER_ADDRESS))
+
+    recipients = ["bhakti.prabhu@lntinfotech.com","bhaktiprabhu98@gmail.com"]
+    msg["To"] = ', '.join(recipients)
+
+    msg['Subject']="Major Incident Management Report"
+
+    # add in the message body
+    body = 'Hello All, <br><br> PFA the Major Incident Management Report. <br><br> Regard, <br> IIM Bot'
+    msg.attach(MIMEText(body, 'html'))
+
+    doc = MIMEApplication(open("Final-MIR.docx", 'rb').read())
+    doc.add_header('Content-Disposition', 'attachment', filename=filename)
+    msg.attach(doc)
+
+    # send the message via the server set up earlier.
+    try:
+        smtp.send_message(msg)
+        del msg
+    except:
+        return None
+
+    return "Success"
 
 def get_recipients():
     """Gets recipients of email from database"""

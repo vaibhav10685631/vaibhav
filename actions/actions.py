@@ -16,7 +16,7 @@ from actions.requester import ENGINE, get_response,get_article,put_response,get_
 from actions.requester import post_attachment,get_attachment,get_groups
 from actions.auth_tokens import refresh_token, get_bot_headers
 from actions.card_activity import update_activity
-from actions.email_notification import send_email_notification, get_recipients
+from actions.email_notification import send_email_notification, send_mir, get_recipients
 
 from actions.constants import SLA_TABLE_SPEC, INC_TABLE_SPEC, JRNL_TABLE_SPEC, KNLDG_TABLE_SPEC
 from actions.constants import EMAIL_SLOTS, BOT_URL, CATALOG_APP_ID
@@ -55,26 +55,21 @@ class ActionNewIncident(Action):
 
         url = "https://graph.microsoft.com/v1.0/chats"
 
+        member_ids = ['bhakti.prabhu@iimbot.onmicrosoft.com', 'amol.chaudhari@iimbot.onmicrosoft.com', 'karanjeet.singh@iimbot.onmicrosoft.com']
+        members = []
+        for member_id in member_ids:
+            members.append(
+                {
+                "@odata.type": "#microsoft.graph.aadUserConversationMember",
+                "roles": ["owner"],
+                "user@odata.bind": f"https://graph.microsoft.com/v1.0/users('{member_id}')"
+                }
+            )
+
         data = {
-        "chatType": "group",
-        "topic": "MIM "+number,
-        "members": [
-            {
-            "@odata.type": "#microsoft.graph.aadUserConversationMember",
-            "roles": ["owner"],
-            "user@odata.bind": "https://graph.microsoft.com/v1.0/users/c78a69a8-b0e3-4dc1-b3fd-5b18a88cd5e8"
-            },
-            {
-            "@odata.type": "#microsoft.graph.aadUserConversationMember",
-            "roles": ["owner"],
-            "user@odata.bind": "https://graph.microsoft.com/v1.0/users/7a8de6b5-89a4-4963-9312-41b28b92123b"
-            },
-            {
-            "@odata.type": "#microsoft.graph.aadUserConversationMember",
-            "roles": ["owner"],
-            "user@odata.bind": "https://graph.microsoft.com/v1.0/users/f73c7b5c-b937-4d14-8a60-d0728a550a12"
-            }
-        ]
+            "chatType": "group",
+            "topic": "MIM "+number,
+            "members": members
         }
 
         data = json.dumps(data)
@@ -2927,31 +2922,35 @@ class ActionSaveEmailDetails(Action):
                 return []
 
         return_events_list = []
-
-        email_events = [
-            SlotSet('Epriority', value['Epriority']),
-            SlotSet('Emistate', value['Emistate']),
-            SlotSet('EIncSummary', value['EIncSummary']),
-            SlotSet('EBizImp', value['EBizImp']),
-            SlotSet('EImpLoc', value['EImpLoc']),
-            SlotSet('EImpClient', value['EImpClient']),
-            SlotSet('EImpApp', value['EImpApp']),
-            SlotSet('EImpUsr', value['EImpUsr']),
-            SlotSet('EIsRepBy', value['EIsRepBy']),
-            SlotSet('EIncRef', value['EIncRef']),
-            SlotSet('EVendor', value['EVendor']),
-            SlotSet('EIncStart', value['EIncStart']),
-            SlotSet('EMimEng', value['EMimEng']),
-            SlotSet('EMIM', value['EMIM']),
-            SlotSet('ESupTeams', value['ESupTeams']),
-            SlotSet('EWrkArnd', value['EWrkArnd']),
-            SlotSet('EChange', value['EChange']),
-            SlotSet('ERFO', value['ERFO']),
-            SlotSet('EResTime', value['EResTime']),
-            SlotSet('EOutDur', value['EOutDur']),
-            SlotSet('ENxtUpd', value['ENxtUpd']),
-            SlotSet('EDL', value['EDL'])
-        ]
+        try:
+            email_events = [
+                SlotSet('Epriority', value['Epriority']),
+                SlotSet('Emistate', value['Emistate']),
+                SlotSet('EIncSummary', value['EIncSummary']),
+                SlotSet('EBizImp', value['EBizImp']),
+                SlotSet('EImpLoc', value['EImpLoc']),
+                SlotSet('EImpClient', value['EImpClient']),
+                SlotSet('EImpApp', value['EImpApp']),
+                SlotSet('EImpUsr', value['EImpUsr']),
+                SlotSet('EIsRepBy', value['EIsRepBy']),
+                SlotSet('EIncRef', value['EIncRef']),
+                SlotSet('EVendor', value['EVendor']),
+                SlotSet('EIncStart', value['EIncStart']),
+                SlotSet('EMimEng', value['EMimEng']),
+                SlotSet('EMIM', value['EMIM']),
+                SlotSet('ESupTeams', value['ESupTeams']),
+                SlotSet('EWrkArnd', value['EWrkArnd']),
+                SlotSet('EChange', value['EChange']),
+                SlotSet('ERFO', value['ERFO']),
+                SlotSet('EResTime', value['EResTime']),
+                SlotSet('EOutDur', value['EOutDur']),
+                SlotSet('ENxtUpd', value['ENxtUpd']),
+                SlotSet('EDL', value['EDL'])
+            ]
+        except:
+            dispatcher.utter_message(text="Error trying to save the details!")
+            dispatcher.utter_message(text="Please make sure that all the values are filled.")
+            return []
 
         return_events_list.extend(email_events)
 
@@ -3246,6 +3245,9 @@ class ActionSendEmail(Action):
 
         if mail_sent == "Success":
             update_activity(chat_id,activity_id,user,card_content = "Email Sent to Stakeholders.")
+        elif mail_sent == "No DL":
+            dispatcher.utter_message("Distribution Lists not entered properly.")
+            return []
         else:
             dispatcher.utter_message("Some problem occurred while sending the Email.")
             return []
@@ -3355,7 +3357,7 @@ class ActionGenerateMIR(Action):
 
         if not problem_ref:
             problem_ref = "NA"
-            
+
         document.merge(
             incident_summary=es_dict['EIncSummary'],
             incident_description=description,
@@ -3458,5 +3460,46 @@ class ActionGenerateMIR(Action):
         }
 
         dispatcher.utter_message(json_message=mir_card)
+
+        return []
+
+class ActionSendMIR(Action):
+    """Extracts MIR froms sharepoint site and sends to stakeholders via Email"""
+
+    def name(self) -> Text:
+        return "action_send_MIR"
+
+    async def run(self,
+           dispatcher: CollectingDispatcher,
+           tracker: Tracker,
+           domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+
+        ## Get sharepoint file ##
+        file_name = 'MIR_' + tracker.get_slot('number') + '.docx'
+        url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/drive/items/root:/General/{file_name}:/content"
+
+        while True:
+            response = requests.get(url=url, headers=actions.globals.HEADERS)
+            if response.status_code == 401:
+                print("Token Expired.....Refreshing Token")
+                refresh_token()
+            elif response.ok:
+                with open('Final-MIR.docx', 'wb') as file:
+                    file.write(response.content)
+                break
+            else:
+                dispatcher.utter_message("Problem occurred while downloading the MIR from sharepoint. "\
+                "Make sure that the naming is proper i.e. MIR_<INC_number>.docx")
+                print('Status:', response.status_code, 'Headers:', response.headers, 'Error Response:',response.json())
+                return []
+
+        ## Send email wit MIR as attachment ##
+        print("****** SEND MIR ******")
+        mail_sent = send_mir(file_name)
+
+        if mail_sent == "Success":
+            dispatcher.utter_message("MIR has been sent to stakeholders via Email.")
+        else:
+            dispatcher.utter_message("Some problem occurred while sending the MIR.")
 
         return []

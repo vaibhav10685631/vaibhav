@@ -44,6 +44,7 @@ intents:
 - set_email_reminder
 - cancel_email_reminder
 - generate_mir
+- send_mir
 - EXTERNAL_update:
     use_entities: true
 - EXTERNAL_new:
@@ -271,3 +272,4 @@ actions:
 - action_cancel_email_reminder
 - action_react_to_email_reminder
 - action_generate_MIR
+- action_send_MIR
