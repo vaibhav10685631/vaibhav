@@ -24,3 +24,8 @@ TENANT = 'iimbot'
 SITE_NAME = 'MIR'
 SITE_ID = '30caa8f1-56a6-4243-835f-4a270a97f1e0'
 FOLDER = 'General'
+
+#### Email Credentials ####
+SENDER_ADDRESS = 'iim_bot@outlook.com'
+SENDER_NAME = 'MIM'
+PASSWORD = 'Office@123'

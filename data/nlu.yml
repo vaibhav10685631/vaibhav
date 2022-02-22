@@ -370,15 +370,23 @@ nlu:
     - stop reminding email
     - stop email
 
-#MIR Generation intent
+#MIR intents
 - intent: generate_mir
   examples: |
     - generate MIR Report
     - generate mir
     - upload mir 
     - generate major incident report
-    - mir report
     - post major incident report
+    - create mir
+
+- intent: send_mir
+  examples: |
+    - send MIR Report
+    - email mir to stakeholders
+    - communicate mir 
+    - send major incident report
+    - send post major incident report
 
 #Synonyms
 - synonym: incident
@@ -418,3 +426,8 @@ nlu:
     - cancel
     - stop
     - pause
+- synonym: mir
+  examples: |
+    - mir
+    - major incident report
+    - post major incident report
