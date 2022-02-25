@@ -11,7 +11,7 @@ MICROSOFT_OAUTH2_PATH_BOT = "botframework.com/oauth2/v2.0/token"
 MICROSOFT_OAUTH2_PATH_APP = "organizations/oauth2/v2.0/token"
 
 APP_CLIENT_ID = "2e0d6109-4251-4003-b8ff-1d0ee6faf010"
-APP_SECRET_ID = "aaduElqRs1nWro1_5_M-1dze_a-by-624j"
+APP_SECRET_ID = "u4eDKJMlRjx5uJsdeA04ENV1NEJQfGkOoo"
 SCOPE = "offline_access+User.ReadBasic.All+Chat.Create+ChatMember.ReadWrite+"\
     "TeamsAppInstallation.ReadWriteForChat+AppCatalog.Read.All"
 REDIRECT_URI = "http://localhost:10060/oauth"
