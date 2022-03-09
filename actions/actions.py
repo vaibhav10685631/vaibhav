@@ -51,662 +51,682 @@ class ActionNewIncident(Action):
         sys_created_on = tracker.get_slot('sys_created_on')
         inc_start = datetime.datetime.strptime(sys_created_on, '%d-%m-%Y %H:%M:%S').strftime("%d-%b-%Y %H:%M")
 
-        ########### 1. Create a New Chat and add Members in Teams ###################
+        ########### 0. Check if the room/group already exists for the particular incident ###################
+        query = f"SELECT * FROM incident_chat_map WHERE number='{number}'"
+        result = ENGINE.execute(query)
+        row = result.fetchall()
+        print("\n Result row ::", row)
+        if len(row) == 1:
+            chat_id = row[0]['chat_id']
+            bot_conv_url =  BOT_URL+chat_id+"/activities"
+            bot_headers = get_bot_headers()
+            inc_update = {
+                "type":"message",
+                "text" : "<b>The incident is again promoted to Major Incident State!</b>"
+            }
 
-        url = "https://graph.microsoft.com/v1.0/chats"
+            send_update_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(inc_update))
 
-        member_ids = ['bhakti.prabhu@iimbot.onmicrosoft.com', 'amol.chaudhari@iimbot.onmicrosoft.com', 'karanjeet.singh@iimbot.onmicrosoft.com']
-        members = []
-        for member_id in member_ids:
-            members.append(
-                {
-                "@odata.type": "#microsoft.graph.aadUserConversationMember",
-                "roles": ["owner"],
-                "user@odata.bind": f"https://graph.microsoft.com/v1.0/users('{member_id}')"
-                }
-            )
+            if not send_update_response.ok:
+                print("Error trying to send ticket update message. Response: %s",send_update_response.text)
 
-        data = {
-            "chatType": "group",
-            "topic": "MIM "+number,
-            "members": members
-        }
+        else:
+            ########### 1. Create a New Chat and add Members in Teams ###################
 
-        data = json.dumps(data)
-        while True:
-            response = requests.post(url, headers=actions.globals.HEADERS, data=data)
-            if response.status_code == 401:
-                print("Token Expired.....Refreshing Token")
-                refresh_token()
-            elif response.ok:
-                chat_data = response.json()
-                chat_id = chat_data['id']
-                print("*****Chat created successfully*****")
-                break
-            else:
-                print(
-                    'Status:', response.status_code,
-                    'Headers:', response.headers,
-                    'Error Response:',response.json()
-                )
-                return []
+            url = "https://graph.microsoft.com/v1.0/chats"
 
-        ######## 2. Map Number and Room Id and Store it in the Database #########
-        query = f"INSERT INTO incident_chat_map VALUES ('{number}','{sys_id}','{chat_id}')"
-        ENGINE.execute(query)
-
-        ########## 3. Add Bot to the Created Chat ##########
-        url = f"https://graph.microsoft.com/v1.0/chats/{chat_id}/installedApps"
-        data = {
-        "teamsApp@odata.bind":"https://graph.microsoft.com/v1.0/appCatalogs/teamsApps/"+CATALOG_APP_ID
-        }
-
-        data = json.dumps(data)
-
-        while True:
-            response = requests.post(url, headers=actions.globals.HEADERS, data=data)
-            if response.status_code == 401:
-                print("Token Expired.....Refreshing Token")
-                refresh_token()
-            elif response.ok:
-                print("*****App Installed Successfully*****")
-                break
-            else:
-                print(
-                    'Status:', response.status_code,
-                    'Headers:', response.headers,
-                    'Error Response:',response.json()
-                )
-                break
-
-        ###### 3. Alert Message By Bot #######
-        bot_conv_url =  BOT_URL+chat_id+"/activities"
-        bot_headers = get_bot_headers()
-        new_ticket_alert = {
-            "type":"message",
-            "attachments": [
-                {
-                    "contentType": "application/vnd.microsoft.card.adaptive",
-                    "content":
+            member_ids = ['bhakti.prabhu@iimbot.onmicrosoft.com', 'amol.chaudhari@iimbot.onmicrosoft.com', 'karanjeet.singh@iimbot.onmicrosoft.com']
+            members = []
+            for member_id in member_ids:
+                members.append(
                     {
-                        "type": "AdaptiveCard",
-                        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                        "version": "1.2",
-                        "body": [
-                            {
-                                "type": "ColumnSet",
-                                "columns": [
-                                    {
-                                        "type": "Column",
-                                        "items": [
-                                            {
-                                                "type": "TextBlock",
-                                                "weight": "Bolder",
-                                                "text": "A Major Incident is raised!",
-                                                "color": "Warning",
-                                                "size": "Large",
-                                                "spacing": "Small"
-                                            }
-                                        ],
-                                        "width": "stretch"
-                                    }
-                                ]
-                            },
-                            {
-                                "type": "ColumnSet",
-                                "columns": [
-                                    {
-                                        "type": "Column",
-                                        "width": 35,
-                                        "items": [
-                                            {
-                                                "type": "TextBlock",
-                                                "text": "Incident Number:"
-                                            },
-                                            {
-                                                "type": "TextBlock",
-                                                "text": "Created On:",
-                                                "spacing": "Small"
-                                            },
-                                            {
-                                                "type": "TextBlock",
-                                                "text": "Description:",
-                                                "spacing": "Small"
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        "type": "Column",
-                                        "width": 65,
-                                        "items": [
-                                            {
-                                                "type": "TextBlock",
-                                                "text": number
-                                            },
-                                            {
-                                                "type": "TextBlock",
-                                                "text": inc_start,
-                                                "spacing": "Small"
-                                            },
-                                            {
-                                                "type": "TextBlock",
-                                                "text": short_description,
-                                                "spacing": "Small"
-                                            }
-                                        ]
-                                    }
-                                ],
-                                "spacing": "Padding",
-                                "horizontalAlignment": "Center"
-                            }
-                        ],
+                    "@odata.type": "#microsoft.graph.aadUserConversationMember",
+                    "roles": ["owner"],
+                    "user@odata.bind": f"https://graph.microsoft.com/v1.0/users('{member_id}')"
                     }
-                }
-            ]
-        }
+                )
 
-        send_alert_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(new_ticket_alert))
+            data = {
+                "chatType": "group",
+                "topic": "MIM "+number,
+                "members": members
+            }
 
-        if not send_alert_response.ok:
-            print("Error trying to send new ticket alert message. Response: %s",send_alert_response.text)
+            data = json.dumps(data)
+            while True:
+                response = requests.post(url, headers=actions.globals.HEADERS, data=data)
+                if response.status_code == 401:
+                    print("Token Expired.....Refreshing Token")
+                    refresh_token()
+                elif response.ok:
+                    chat_data = response.json()
+                    chat_id = chat_data['id']
+                    print("*****Chat created successfully*****")
+                    break
+                else:
+                    print(
+                        'Status:', response.status_code,
+                        'Headers:', response.headers,
+                        'Error Response:',response.json()
+                    )
+                    return []
 
-        ###### 4. Send Email Details Card #######
-        next_update = datetime.datetime.strptime(inc_start,'%d-%b-%Y %H:%M') + datetime.timedelta(minutes=30)
-        mim_eng = datetime.datetime.strptime(inc_start,'%d-%b-%Y %H:%M') + datetime.timedelta(minutes=10)
-        nxt_upd_due = next_update.strftime("%d-%b-%Y %H:%M")
-        mim_eng_time = mim_eng.strftime("%d-%b-%Y %H:%M")
+            ######## 2. Map Number and Room Id and Store it in the Database #########
+            query = f"INSERT INTO incident_chat_map VALUES ('{number}','{sys_id}','{chat_id}')"
+            ENGINE.execute(query)
 
-        recipients = ",".join(get_recipients())
+            ########## 3. Add Bot to the Created Chat ##########
+            url = f"https://graph.microsoft.com/v1.0/chats/{chat_id}/installedApps"
+            data = {
+            "teamsApp@odata.bind":"https://graph.microsoft.com/v1.0/appCatalogs/teamsApps/"+CATALOG_APP_ID
+            }
 
-        email_details_card = {
-            "type":"message",
-            "attachments": [
-                {
-                    "contentType": "application/vnd.microsoft.card.adaptive",
-                    "content":
+            data = json.dumps(data)
+
+            while True:
+                response = requests.post(url, headers=actions.globals.HEADERS, data=data)
+                if response.status_code == 401:
+                    print("Token Expired.....Refreshing Token")
+                    refresh_token()
+                elif response.ok:
+                    print("*****App Installed Successfully*****")
+                    break
+                else:
+                    print(
+                        'Status:', response.status_code,
+                        'Headers:', response.headers,
+                        'Error Response:',response.json()
+                    )
+                    break
+
+            ###### 3. Alert Message By Bot #######
+            bot_conv_url =  BOT_URL+chat_id+"/activities"
+            bot_headers = get_bot_headers()
+            new_ticket_alert = {
+                "type":"message",
+                "attachments": [
                     {
-                        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                        "type": "AdaptiveCard",
-                        "version": "1.2",
-                        "body": [
-                            {
-                                "type": "TextBlock",
-                                "size": "medium",
-                                "weight": "bolder",
-                                "text": "Email Communication Details",
-                                "horizontalAlignment": "center"
-                            },
-                            {
-                                "type": "Container",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "Priority:",
-                                        "color": "Accent",
-                                        "weight": "Bolder"
-                                    }
-                                ]
-                            },
-                            {
-                                "type": "Input.ChoiceSet",
-                                "choices": [
-                                    {
-                                        "title": "P1",
-                                        "value": "P1"
-                                    },
-                                    {
-                                        "title": "P2",
-                                        "value": "P2"
-                                    }
-                                ],
-                                "id": "Epriority",
-                                "value": priority,
-                                "spacing": "None"
-                            },
-                            {
-                                "type": "Container",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "Major Incident State:",
-                                        "color": "Accent",
-                                        "weight": "Bolder"
-                                    }
-                                ]
-                            },
-                            {
-                                "type": "Input.ChoiceSet",
-                                "choices": [
-                                    {
-                                        "title": "Declared",
-                                        "value": "Declared"
-                                    },
-                                    {
-                                        "title": "In-Progress",
-                                        "value": "In-Progress"
-                                    },
-                                    {
-                                        "title": "On-Hold",
-                                        "value": "On-Hold"
-                                    },
-                                    {
-                                        "title": "Under Observation",
-                                        "value": "Under Observation"
-                                    },
-                                    {
-                                        "title": "Restored/Monitoring",
-                                        "value": "Restored/Monitoring"
-                                    },
-                                    {
-                                        "title": "Resolved",
-                                        "value": "Resolved"
-                                    },
-                                    {
-                                        "title": "Downgraded",
-                                        "value": "Downgraded"
-                                    },
-                                    {
-                                        "title": "Cancelled",
-                                        "value": "Cancelled"
-                                    }
-                                ],
-                                "id": "Emistate",
-                                "value": "Declared",
-                                "spacing": "None"
-                            },
-                            {
-                                "type": "Container",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "Incident Summary:",
-                                        "color": "Accent",
-                                        "weight": "Bolder"
-                                    }
-                                ]
-                            },
-                            {
-                                "type": "Input.Text",
-                                "id": "EIncSummary",
-                                "spacing": "None",
-                                "value": short_description
-                            },
-                            {
-                                "type": "Container",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "Business Impact (Description):",
-                                        "color": "Accent",
-                                        "weight": "Bolder"
-                                    }
-                                ]
-                            },
-                            {
-                                "type": "Input.Text",
-                                "id": "EBizImp",
-                                "spacing": "None",
-                                "value": business_impact
-                            },
-                            {
-                                "type": "Container",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "Impacted Location(s) / Sites:",
-                                        "color": "Accent",
-                                        "weight": "Bolder"
-                                    }
-                                ]
-                            },
-                            {
-                                "type": "Input.Text",
-                                "id": "EImpLoc",
-                                "spacing": "None",
-                                "value": ""
-                            },
-                            {
-                                "type": "Container",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "Impacted Clients:",
-                                        "color": "Accent",
-                                        "weight": "Bolder"
-                                    }
-                                ]
-                            },
-                            {
-                                "type": "Input.Text",
-                                "id": "EImpClient",
-                                "spacing": "None",
-                                "value": ""
-                            },
-                            {
-                                "type": "Container",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "Impacted Application / Services:",
-                                        "color": "Accent",
-                                        "weight": "Bolder"
-                                    }
-                                ]
-                            },
-                            {
-                                "type": "Input.Text",
-                                "id": "EImpApp",
-                                "spacing": "None",
-                                "value": ""
-                            },
-                            {
-                                "type": "Container",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "No. of users impacted:",
-                                        "color": "Accent",
-                                        "weight": "Bolder"
-                                    }
-                                ]
-                            },
-                            {
-                                "type": "Input.Text",
-                                "id": "EImpUsr",
-                                "spacing": "None",
-                                "value": ""
-                            },
-                            {
-                                "type": "Container",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "Issue reported by:",
-                                        "color": "Accent",
-                                        "weight": "Bolder"
-                                    }
-                                ],
-                                "separator": True
-                            },
-                            {
-                                "type": "Input.Text",
-                                "id": "EIsRepBy",
-                                "spacing": "None",
-                                "value": caller
-                            },
-                            {
-                                "type": "Container",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "Incident Ticket Ref#",
-                                        "color": "Accent",
-                                        "weight": "Bolder"
-                                    }
-                                ]
-                            },
-                            {
-                                "type": "Input.Text",
-                                "id": "EIncRef",
-                                "spacing": "None",
-                                "value": number
-                            },
-                            {
-                                "type": "Container",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "Vendor Name / Ticket Ref:",
-                                        "color": "Accent",
-                                        "weight": "Bolder"
-                                    }
-                                ]
-                            },
-                            {
-                                "type": "Input.Text",
-                                "id": "EVendor",
-                                "spacing": "None",
-                                "value": "NA"
-                            },
-                            {
-                                "type": "Container",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "Incident Start Date/ Time:",
-                                        "color": "Accent",
-                                        "weight": "Bolder"
-                                    }
-                                ]
-                            },
-                            {
-                                "type": "Input.Text",
-                                "id": "EIncStart",
-                                "spacing": "None",
-                                "value": inc_start
-                            },
-                            {
-                                "type": "Container",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "Date / Time (MIM Engaged):",
-                                        "color": "Accent",
-                                        "weight": "Bolder"
-                                    }
-                                ]
-                            },
-                            {
-                                "type": "Input.Text",
-                                "id": "EMimEng",
-                                "spacing": "None",
-                                "value": mim_eng_time
-                            },
-                            {
-                                "type": "Container",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "Major Incident Manager:",
-                                        "color": "Accent",
-                                        "weight": "Bolder"
-                                    }
-                                ],
-                                "separator": True
-                            },
-                            {
-                                "type": "Input.ChoiceSet",
-                                "choices": [
-                                    {
-                                        "title": "MIM Mgr 1",
-                                        "value": "MIM Mgr 1"
-                                    },
-                                    {
-                                        "title": "MIM Mgr 2",
-                                        "value": "MIM Mgr 2"
-                                    },
-                                    {
-                                        "title": "MIM Mgr 3",
-                                        "value": "MIM Mgr 3"
-                                    }
-                                ],
-                                "id": "EMIM",
-                                "value": "",
-                                "spacing": "None"
-                            },
-                            {
-                                "type": "Container",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "Support Teams involved:",
-                                        "color": "Accent",
-                                        "weight": "Bolder"
-                                    }
-                                ]
-                            },
-                            {
-                                "type": "Input.Text",
-                                "id": "ESupTeams",
-                                "spacing": "None",
-                                "value": ""
-                            },
-                            {
-                                "type": "Container",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "Workaround:",
-                                        "color": "Accent",
-                                        "weight": "Bolder"
-                                    }
-                                ],
-                                "separator": True
-                            },
-                            {
-                                "type": "Input.Text",
-                                "id": "EWrkArnd",
-                                "spacing": "None",
-                                "value": "(To be determind)"
-                            },
-                            {
-                                "type": "Container",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "Change Related / Ref:",
-                                        "color": "Accent",
-                                        "weight": "Bolder"
-                                    }
-                                ],
-                                "separator": True
-                            },
-                            {
-                                "type": "Input.Text",
-                                "id": "EChange",
-                                "spacing": "None",
-                                "value": "(To be determind)"
-                            },
-                            {
-                                "type": "Container",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "Reason for Outage (RFO):",
-                                        "color": "Accent",
-                                        "weight": "Bolder"
-                                    }
-                                ]
-                            },
-                            {
-                                "type": "Input.Text",
-                                "id": "ERFO",
-                                "spacing": "None",
-                                "value": "(To be determind)"
-                            },
-                            {
-                                "type": "Container",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "Actual Resolution Time:",
-                                        "color": "Accent",
-                                        "weight": "Bolder"
-                                    }
-                                ]
-                            },
-                            {
-                                "type": "Input.Text",
-                                "id": "EResTime",
-                                "spacing": "None",
-                                "value": "(To be determind)"
-                            },
-                            {
-                                "type": "Container",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "Outage Duration:",
-                                        "color": "Accent",
-                                        "weight": "Bolder"
-                                    }
-                                ]
-                            },
-                            {
-                                "type": "Input.Text",
-                                "id": "EOutDur",
-                                "spacing": "None",
-                                "value": "(To be determind)"
-                            },
-                            {
-                                "type": "Container",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "Next Update Due:",
-                                        "color": "Accent",
-                                        "weight": "Bolder"
-                                    }
-                                ]
-                            },
-                            {
-                                "type": "Input.Text",
-                                "id": "ENxtUpd",
-                                "spacing": "None",
-                                "value": nxt_upd_due
-                            },
-                            {
-                                "type": "Container",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "Distribution Lists: ",
-                                        "color": "Accent",
-                                        "weight": "Bolder"
-                                    }
-                                ],
-                                "separator": True
-                            },
-                            {
-                                "type": "Input.Text",
-                                "id": "EDL",
-                                "spacing": "None",
-                                "value": recipients,
-                                "isMultiline": True
-                            },
-                            {
-                                "type": "Input.Toggle",
-                                "title": "Recieve Reminders for sending Email Notification",
-                                "id": "Erem_flag"
-                            },
-                            {
-                                "type": "ActionSet",
-                                "actions": [
-                                    {
-                                        "type": "Action.Submit",
-                                        "title": "Save Details",
-                                        "data": {
-                                            "msteams": {
-                                                "type": "messageBack",
-                                                "text": "User interaction with Email Details card"
-                                            },
-                                            "init_com": "true"
+                        "contentType": "application/vnd.microsoft.card.adaptive",
+                        "content":
+                        {
+                            "type": "AdaptiveCard",
+                            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                            "version": "1.2",
+                            "body": [
+                                {
+                                    "type": "ColumnSet",
+                                    "columns": [
+                                        {
+                                            "type": "Column",
+                                            "items": [
+                                                {
+                                                    "type": "TextBlock",
+                                                    "weight": "Bolder",
+                                                    "text": "A Major Incident is raised!",
+                                                    "color": "Warning",
+                                                    "size": "Large",
+                                                    "spacing": "Small"
+                                                }
+                                            ],
+                                            "width": "stretch"
                                         }
-                                    }
-                                ],
-                                "horizontalAlignment": "Center",
-                                "spacing": "None"
-                            }
-                        ]
+                                    ]
+                                },
+                                {
+                                    "type": "ColumnSet",
+                                    "columns": [
+                                        {
+                                            "type": "Column",
+                                            "width": 35,
+                                            "items": [
+                                                {
+                                                    "type": "TextBlock",
+                                                    "text": "Incident Number:"
+                                                },
+                                                {
+                                                    "type": "TextBlock",
+                                                    "text": "Created On:",
+                                                    "spacing": "Small"
+                                                },
+                                                {
+                                                    "type": "TextBlock",
+                                                    "text": "Description:",
+                                                    "spacing": "Small"
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            "type": "Column",
+                                            "width": 65,
+                                            "items": [
+                                                {
+                                                    "type": "TextBlock",
+                                                    "text": number
+                                                },
+                                                {
+                                                    "type": "TextBlock",
+                                                    "text": inc_start,
+                                                    "spacing": "Small"
+                                                },
+                                                {
+                                                    "type": "TextBlock",
+                                                    "text": short_description,
+                                                    "spacing": "Small"
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                    "spacing": "Padding",
+                                    "horizontalAlignment": "Center"
+                                }
+                            ],
+                        }
                     }
-                }
-            ]
-        }
+                ]
+            }
 
-        email_details_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(email_details_card))
+            send_alert_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(new_ticket_alert))
 
-        if not send_alert_response.ok:
-            print("Error trying to send email details card. Response: %s",email_details_response.text)
+            if not send_alert_response.ok:
+                print("Error trying to send new ticket alert message. Response: %s",send_alert_response.text)
+
+            ###### 4. Send Email Details Card #######
+            next_update = datetime.datetime.strptime(inc_start,'%d-%b-%Y %H:%M') + datetime.timedelta(minutes=30)
+            mim_eng = datetime.datetime.strptime(inc_start,'%d-%b-%Y %H:%M') + datetime.timedelta(minutes=10)
+            nxt_upd_due = next_update.strftime("%d-%b-%Y %H:%M")
+            mim_eng_time = mim_eng.strftime("%d-%b-%Y %H:%M")
+
+            recipients = ",".join(get_recipients())
+
+            email_details_card = {
+                "type":"message",
+                "attachments": [
+                    {
+                        "contentType": "application/vnd.microsoft.card.adaptive",
+                        "content":
+                        {
+                            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                            "type": "AdaptiveCard",
+                            "version": "1.2",
+                            "body": [
+                                {
+                                    "type": "TextBlock",
+                                    "size": "medium",
+                                    "weight": "bolder",
+                                    "text": "Email Communication Details",
+                                    "horizontalAlignment": "center"
+                                },
+                                {
+                                    "type": "Container",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "Priority:",
+                                            "color": "Accent",
+                                            "weight": "Bolder"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "Input.ChoiceSet",
+                                    "choices": [
+                                        {
+                                            "title": "P1",
+                                            "value": "P1"
+                                        },
+                                        {
+                                            "title": "P2",
+                                            "value": "P2"
+                                        }
+                                    ],
+                                    "id": "Epriority",
+                                    "value": priority,
+                                    "spacing": "None"
+                                },
+                                {
+                                    "type": "Container",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "Major Incident State:",
+                                            "color": "Accent",
+                                            "weight": "Bolder"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "Input.ChoiceSet",
+                                    "choices": [
+                                        {
+                                            "title": "Declared",
+                                            "value": "Declared"
+                                        },
+                                        {
+                                            "title": "In-Progress",
+                                            "value": "In-Progress"
+                                        },
+                                        {
+                                            "title": "On-Hold",
+                                            "value": "On-Hold"
+                                        },
+                                        {
+                                            "title": "Under Observation",
+                                            "value": "Under Observation"
+                                        },
+                                        {
+                                            "title": "Restored/Monitoring",
+                                            "value": "Restored/Monitoring"
+                                        },
+                                        {
+                                            "title": "Resolved",
+                                            "value": "Resolved"
+                                        },
+                                        {
+                                            "title": "Downgraded",
+                                            "value": "Downgraded"
+                                        },
+                                        {
+                                            "title": "Cancelled",
+                                            "value": "Cancelled"
+                                        }
+                                    ],
+                                    "id": "Emistate",
+                                    "value": "Declared",
+                                    "spacing": "None"
+                                },
+                                {
+                                    "type": "Container",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "Incident Summary:",
+                                            "color": "Accent",
+                                            "weight": "Bolder"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "Input.Text",
+                                    "id": "EIncSummary",
+                                    "spacing": "None",
+                                    "value": short_description
+                                },
+                                {
+                                    "type": "Container",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "Business Impact (Description):",
+                                            "color": "Accent",
+                                            "weight": "Bolder"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "Input.Text",
+                                    "id": "EBizImp",
+                                    "spacing": "None",
+                                    "value": business_impact
+                                },
+                                {
+                                    "type": "Container",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "Impacted Location(s) / Sites:",
+                                            "color": "Accent",
+                                            "weight": "Bolder"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "Input.Text",
+                                    "id": "EImpLoc",
+                                    "spacing": "None",
+                                    "value": ""
+                                },
+                                {
+                                    "type": "Container",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "Impacted Clients:",
+                                            "color": "Accent",
+                                            "weight": "Bolder"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "Input.Text",
+                                    "id": "EImpClient",
+                                    "spacing": "None",
+                                    "value": ""
+                                },
+                                {
+                                    "type": "Container",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "Impacted Application / Services:",
+                                            "color": "Accent",
+                                            "weight": "Bolder"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "Input.Text",
+                                    "id": "EImpApp",
+                                    "spacing": "None",
+                                    "value": ""
+                                },
+                                {
+                                    "type": "Container",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "No. of users impacted:",
+                                            "color": "Accent",
+                                            "weight": "Bolder"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "Input.Text",
+                                    "id": "EImpUsr",
+                                    "spacing": "None",
+                                    "value": ""
+                                },
+                                {
+                                    "type": "Container",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "Issue reported by:",
+                                            "color": "Accent",
+                                            "weight": "Bolder"
+                                        }
+                                    ],
+                                    "separator": True
+                                },
+                                {
+                                    "type": "Input.Text",
+                                    "id": "EIsRepBy",
+                                    "spacing": "None",
+                                    "value": caller
+                                },
+                                {
+                                    "type": "Container",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "Incident Ticket Ref#",
+                                            "color": "Accent",
+                                            "weight": "Bolder"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "Input.Text",
+                                    "id": "EIncRef",
+                                    "spacing": "None",
+                                    "value": number
+                                },
+                                {
+                                    "type": "Container",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "Vendor Name / Ticket Ref:",
+                                            "color": "Accent",
+                                            "weight": "Bolder"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "Input.Text",
+                                    "id": "EVendor",
+                                    "spacing": "None",
+                                    "value": "NA"
+                                },
+                                {
+                                    "type": "Container",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "Incident Start Date/ Time:",
+                                            "color": "Accent",
+                                            "weight": "Bolder"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "Input.Text",
+                                    "id": "EIncStart",
+                                    "spacing": "None",
+                                    "value": inc_start
+                                },
+                                {
+                                    "type": "Container",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "Date / Time (MIM Engaged):",
+                                            "color": "Accent",
+                                            "weight": "Bolder"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "Input.Text",
+                                    "id": "EMimEng",
+                                    "spacing": "None",
+                                    "value": mim_eng_time
+                                },
+                                {
+                                    "type": "Container",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "Major Incident Manager:",
+                                            "color": "Accent",
+                                            "weight": "Bolder"
+                                        }
+                                    ],
+                                    "separator": True
+                                },
+                                {
+                                    "type": "Input.ChoiceSet",
+                                    "choices": [
+                                        {
+                                            "title": "MIM Mgr 1",
+                                            "value": "MIM Mgr 1"
+                                        },
+                                        {
+                                            "title": "MIM Mgr 2",
+                                            "value": "MIM Mgr 2"
+                                        },
+                                        {
+                                            "title": "MIM Mgr 3",
+                                            "value": "MIM Mgr 3"
+                                        }
+                                    ],
+                                    "id": "EMIM",
+                                    "value": "",
+                                    "spacing": "None"
+                                },
+                                {
+                                    "type": "Container",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "Support Teams involved:",
+                                            "color": "Accent",
+                                            "weight": "Bolder"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "Input.Text",
+                                    "id": "ESupTeams",
+                                    "spacing": "None",
+                                    "value": ""
+                                },
+                                {
+                                    "type": "Container",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "Workaround:",
+                                            "color": "Accent",
+                                            "weight": "Bolder"
+                                        }
+                                    ],
+                                    "separator": True
+                                },
+                                {
+                                    "type": "Input.Text",
+                                    "id": "EWrkArnd",
+                                    "spacing": "None",
+                                    "value": "(To be determind)"
+                                },
+                                {
+                                    "type": "Container",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "Change Related / Ref:",
+                                            "color": "Accent",
+                                            "weight": "Bolder"
+                                        }
+                                    ],
+                                    "separator": True
+                                },
+                                {
+                                    "type": "Input.Text",
+                                    "id": "EChange",
+                                    "spacing": "None",
+                                    "value": "(To be determind)"
+                                },
+                                {
+                                    "type": "Container",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "Reason for Outage (RFO):",
+                                            "color": "Accent",
+                                            "weight": "Bolder"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "Input.Text",
+                                    "id": "ERFO",
+                                    "spacing": "None",
+                                    "value": "(To be determind)"
+                                },
+                                {
+                                    "type": "Container",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "Actual Resolution Time:",
+                                            "color": "Accent",
+                                            "weight": "Bolder"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "Input.Text",
+                                    "id": "EResTime",
+                                    "spacing": "None",
+                                    "value": "(To be determind)"
+                                },
+                                {
+                                    "type": "Container",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "Outage Duration:",
+                                            "color": "Accent",
+                                            "weight": "Bolder"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "Input.Text",
+                                    "id": "EOutDur",
+                                    "spacing": "None",
+                                    "value": "(To be determind)"
+                                },
+                                {
+                                    "type": "Container",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "Next Update Due:",
+                                            "color": "Accent",
+                                            "weight": "Bolder"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "Input.Text",
+                                    "id": "ENxtUpd",
+                                    "spacing": "None",
+                                    "value": nxt_upd_due
+                                },
+                                {
+                                    "type": "Container",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "Distribution Lists: ",
+                                            "color": "Accent",
+                                            "weight": "Bolder"
+                                        }
+                                    ],
+                                    "separator": True
+                                },
+                                {
+                                    "type": "Input.Text",
+                                    "id": "EDL",
+                                    "spacing": "None",
+                                    "value": recipients,
+                                    "isMultiline": True
+                                },
+                                {
+                                    "type": "Input.Toggle",
+                                    "title": "Recieve Reminders for sending Email Notification",
+                                    "id": "Erem_flag"
+                                },
+                                {
+                                    "type": "ActionSet",
+                                    "actions": [
+                                        {
+                                            "type": "Action.Submit",
+                                            "title": "Save Details",
+                                            "data": {
+                                                "msteams": {
+                                                    "type": "messageBack",
+                                                    "text": "User interaction with Email Details card"
+                                                },
+                                                "init_com": "true"
+                                            }
+                                        }
+                                    ],
+                                    "horizontalAlignment": "Center",
+                                    "spacing": "None"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+
+            email_details_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(email_details_card))
+
+            if not send_alert_response.ok:
+                print("Error trying to send email details card. Response: %s",email_details_response.text)
 
         ######## 7. Store Room Id in Snow Incident Table #########
         query_filter = '?sysparm_fields=u_room_id'
@@ -734,16 +754,39 @@ class ActionIncidentUpdate(Action):
         resolved_flag = tracker.get_slot("res_flag")
 
         number = tracker.get_slot('number')
+        state = tracker.get_slot('state')
+        mi_state = tracker.get_slot('mi_state')
         note_info = tracker.get_slot('note_info')
         note_msg = tracker.get_slot('note_msg')
         note_type = tracker.get_slot('note_type')
-        state = tracker.get_slot('state')
 
         updated_by = note_info.split('-')[-1]
         chat_id = tracker.sender_id
 
         bot_conv_url =  BOT_URL+chat_id+"/activities"
         bot_headers = get_bot_headers()
+
+        if mi_state == 'Canceled':
+            print("\n\nThe incident in demoted from major incident state.")
+            inc_update = {
+                "type": "message",
+                "text" : "**This incident is no longer a Major Incident.**<br>"\
+                    "*Hence, the Update Notifications and Reminders for this incident will be stopped.*<br>"\
+                    "Update Information: - <br> **Updated By:** "\
+                    +updated_by+"<br> **"+note_type+":** "+note_msg.replace('\n','<br>')
+                }
+
+            send_update_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(inc_update))
+
+            if not send_update_response.ok:
+                print("Error trying to send ticket update message. Response: %s",send_update_response.text)
+
+            ##### Cancel All Reminders #####
+            no_update_rem = "no_update_"+number
+            print("\nCancelling Reminders..............")
+            print("\n", no_update_rem, "\n email_update_rem ")
+
+            return [ReminderCancelled(name=no_update_rem), ReminderCancelled("email_update_rem")]
 
         if state in ('Resolved','Closed'):
             print("The incident is Resolved/Closed")
@@ -3171,6 +3214,7 @@ class ActionSaveEmailDetails(Action):
                 value['Emistate'] != 'Resolved'
                 and tracker.get_slot('Erem_flag') == 'true'
                 and tracker.get_slot('ENxtUpd') != value['ENxtUpd']
+                and tracker.get_slot('mi_state') == 'Accepted'
             ):
                 ###### Set Email Reminder #######
                 email_update_time = next_update - datetime.timedelta(minutes=5)
@@ -3258,7 +3302,7 @@ class ActionSendEmail(Action):
         # return_events_list.extend([SlotSet('ENxtUpd', es_dict['ENxtUpd'])])
         return_events_list.extend([SlotSet("emailUpdateHistory", consolidated_update), SlotSet('emailUpdCardId', None)])
 
-        if es_dict["Emistate"] == 'Declared' and tracker.get_slot('Erem_flag') == 'true':
+        if es_dict["Emistate"] == 'Declared' and tracker.get_slot('Erem_flag') == 'true' and tracker.get_slot('mi_state') == 'Accepted':
             ###### Set Email Reminder #######
             email_update_time = nxt_upd_due - datetime.timedelta(minutes=5)
             email_update_reminder = ReminderScheduled(
@@ -3284,6 +3328,11 @@ class ActionSetEmailReminder(Action):
     async def run(
         self, dispatcher, tracker: Tracker, domain: Dict[Text, Any]
     ) -> List[Dict[Text, Any]]:
+
+        mi_state = tracker.get_slot('mi_state')
+        if mi_state == 'Canceled':
+            dispatcher.utter_message(text = 'Cannot set reminder as this is not a Major Incident')
+            return []
 
         erem = tracker.get_slot('Erem_flag')
         if erem == 'true':
@@ -3338,6 +3387,11 @@ class ActionGenerateMIR(Action):
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+
+        mi_state = tracker.get_slot('mi_state')
+        if mi_state == 'Canceled':
+            dispatcher.utter_message(text = 'This incident is not a major incident. Hence, Report cannot be generated!')
+            return []
 
         template = "MIR_Template.docx"
         document = MailMerge(template)
@@ -3398,8 +3452,8 @@ class ActionGenerateMIR(Action):
 
         document.write('MIR-output.docx')
 
-        file = open('MIR-output.docx', 'rb')
-        file_content = file.read()
+        with open('MIR-output.docx', 'rb') as file:
+            file_content = file.read()
 
         number = tracker.get_slot('number')
         file_name = 'MIR_' + number + '.docx'
@@ -3473,6 +3527,11 @@ class ActionSendMIR(Action):
            dispatcher: CollectingDispatcher,
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+
+        mi_state = tracker.get_slot('mi_state')
+        if mi_state == 'Canceled':
+            dispatcher.utter_message(text = 'This incident is not a major incident. Hence, Report cannot be sent!')
+            return []
 
         ## Get sharepoint file ##
         file_name = 'MIR_' + tracker.get_slot('number') + '.docx'

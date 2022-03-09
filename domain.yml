@@ -60,6 +60,7 @@ entities:
 - sys_id 
 - number
 - state
+- mi_state
 - short_description
 - sys_created_on
 - priority
@@ -81,6 +82,9 @@ slots:
     type: any
     influence_conversation: false
   state:
+    type: any
+    influence_conversation: false
+  mi_state:
     type: any
     influence_conversation: false
   short_description:
