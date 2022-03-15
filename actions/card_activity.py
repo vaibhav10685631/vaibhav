@@ -3,8 +3,11 @@ This file contains function for Adaptive Card functions.
 """
 
 import json
+import logging
 import requests
 from actions.auth_tokens import get_bot_headers
+
+logger = logging.getLogger(__name__)
 
 UPDATE_URL =  "https://smba.trafficmanager.net/in/v3/conversations/{0}/activities/{1}"
 
@@ -54,4 +57,4 @@ def update_activity(conversation_id: str,
     response = requests.put(url, headers=headers, data=json.dumps(updated_card))
 
     if not response.ok:
-        print("Error trying to update card. Response: %s",response.text)
+        logger.error("Error trying to update card. Response: %s", response.text)

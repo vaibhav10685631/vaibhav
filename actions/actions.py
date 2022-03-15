@@ -5,6 +5,7 @@ This files contains all the custom actions which can be used to run IIM funtions
 import json
 from typing import Any, Text, Dict, List
 import datetime
+import logging
 import requests
 from mailmerge import MailMerge
 
@@ -22,6 +23,8 @@ from actions.constants import SLA_TABLE_SPEC, INC_TABLE_SPEC, JRNL_TABLE_SPEC, K
 from actions.constants import EMAIL_SLOTS, BOT_URL, CATALOG_APP_ID
 from actions.constants import TENANT, SITE_ID, SITE_NAME, FOLDER
 import actions.globals
+
+logger = logging.getLogger(__name__)
 
 ######### IIM Custom Actions #########
 
@@ -55,7 +58,7 @@ class ActionNewIncident(Action):
         query = f"SELECT * FROM incident_chat_map WHERE number='{number}'"
         result = ENGINE.execute(query)
         row = result.fetchall()
-        print("\n Result row ::", row)
+        logger.debug("Check for existence of group for the incident -> %s",row)
         if len(row) == 1:
             chat_id = row[0]['chat_id']
             bot_conv_url =  BOT_URL+chat_id+"/activities"
@@ -68,7 +71,7 @@ class ActionNewIncident(Action):
             send_update_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(inc_update))
 
             if not send_update_response.ok:
-                print("Error trying to send ticket update message. Response: %s",send_update_response.text)
+                logger.error("Error trying to send ticket update message. Response: %s",send_update_response.text)
 
         else:
             ########### 1. Create a New Chat and add Members in Teams ###################
@@ -96,18 +99,19 @@ class ActionNewIncident(Action):
             while True:
                 response = requests.post(url, headers=actions.globals.HEADERS, data=data)
                 if response.status_code == 401:
-                    print("Token Expired.....Refreshing Token")
+                    logger.info("Token Expired, Refreshing Token")
                     refresh_token()
                 elif response.ok:
                     chat_data = response.json()
                     chat_id = chat_data['id']
-                    print("*****Chat created successfully*****")
+                    logger.info("Chat created successfully with chat id %s",chat_id)
                     break
                 else:
-                    print(
-                        'Status:', response.status_code,
-                        'Headers:', response.headers,
-                        'Error Response:',response.json()
+                    logger.error(
+                        'Status: %s | '\
+                        'Headers: %s | '\
+                        'Error Response: %s',
+                        response.status_code, response.headers, response.json()
                     )
                     return []
 
@@ -126,16 +130,17 @@ class ActionNewIncident(Action):
             while True:
                 response = requests.post(url, headers=actions.globals.HEADERS, data=data)
                 if response.status_code == 401:
-                    print("Token Expired.....Refreshing Token")
+                    logger.info("Token Expired, Refreshing Token")
                     refresh_token()
                 elif response.ok:
-                    print("*****App Installed Successfully*****")
+                    logger.info("App Installed Successfully")
                     break
                 else:
-                    print(
-                        'Status:', response.status_code,
-                        'Headers:', response.headers,
-                        'Error Response:',response.json()
+                    logger.error(
+                        'Status: %s | '\
+                        'Headers: %s | '\
+                        'Error Response: %s',
+                        response.status_code, response.headers, response.json()
                     )
                     break
 
@@ -228,7 +233,7 @@ class ActionNewIncident(Action):
             send_alert_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(new_ticket_alert))
 
             if not send_alert_response.ok:
-                print("Error trying to send new ticket alert message. Response: %s",send_alert_response.text)
+                logger.error("Error trying to send new ticket alert message. Response: %s",send_alert_response.text)
 
             ###### 4. Send Email Details Card #######
             next_update = datetime.datetime.strptime(inc_start,'%d-%b-%Y %H:%M') + datetime.timedelta(minutes=30)
@@ -726,7 +731,7 @@ class ActionNewIncident(Action):
             email_details_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(email_details_card))
 
             if not send_alert_response.ok:
-                print("Error trying to send email details card. Response: %s",email_details_response.text)
+                logger.error("Error trying to send email details card. Response: %s",email_details_response.text)
 
         ######## 7. Store Room Id in Snow Incident Table #########
         query_filter = '?sysparm_fields=u_room_id'
@@ -736,7 +741,7 @@ class ActionNewIncident(Action):
         response_status = put_response(INC_TABLE_SPEC, chat_id, query_filter, json.dumps(data))
 
         if response_status is not None:
-            print("\n ******Room Id Stored in the SNOW Incident Table******")
+            logger.info("Room Id Stored in the SNOW Incident Table")
 
         return []
 
@@ -767,7 +772,7 @@ class ActionIncidentUpdate(Action):
         bot_headers = get_bot_headers()
 
         if mi_state == 'Canceled':
-            print("\n\nThe incident in demoted from major incident state.")
+            logger.info("The incident in demoted from major incident state.")
             inc_update = {
                 "type": "message",
                 "text" : "**This incident is no longer a Major Incident.**<br>"\
@@ -779,17 +784,16 @@ class ActionIncidentUpdate(Action):
             send_update_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(inc_update))
 
             if not send_update_response.ok:
-                print("Error trying to send ticket update message. Response: %s",send_update_response.text)
+                logger.error("Error trying to send ticket update message. Response: %s",send_update_response.text)
 
             ##### Cancel All Reminders #####
             no_update_rem = "no_update_"+number
-            print("\nCancelling Reminders..............")
-            print("\n", no_update_rem, "\n email_update_rem ")
+            logger.info("Cancelling Reminders for incident no. %s", number)
 
             return [ReminderCancelled(name=no_update_rem), ReminderCancelled("email_update_rem")]
 
         if state in ('Resolved','Closed'):
-            print("The incident is Resolved/Closed")
+            logger.info("The incident is Resolved/Closed")
             response = "**The incident has been "+state+".**"
             if state == "Resolved" and resolved_flag == 'false':
                 response = response + "<br> Thank you all for your participation and contribution."\
@@ -829,7 +833,7 @@ class ActionIncidentUpdate(Action):
                             +resolution_notes+knowledge_article
 
             elif resolved_flag == "true":
-                print("\n\nThe incident information is updated")
+                logger.info("The incident information is updated")
                 inc_update = {
                 "type": "message",
                 "text" : "There is a new update on the incident: - <br> **Updated By:** "\
@@ -839,7 +843,7 @@ class ActionIncidentUpdate(Action):
                 send_update_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(inc_update))
 
                 if not send_update_response.ok:
-                    print("Error trying to send ticket update message. Response: %s",send_update_response.text)
+                    logger.error("Error trying to send ticket update message. Response: %s",send_update_response.text)
 
                 return []
 
@@ -851,7 +855,7 @@ class ActionIncidentUpdate(Action):
             send_update_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(inc_update))
 
             if not send_update_response.ok:
-                print("Error trying to send botframework message. Response: %s",send_update_response.text)
+                logger.error("Error trying to send ticket update message. Response: %s", send_update_response.text)
 
             ###### Card for final email update ######
 
@@ -859,8 +863,7 @@ class ActionIncidentUpdate(Action):
 
             ##### Cancel All Reminders #####
             no_update_rem = "no_update_"+number
-            print("\nCancelling Reminders..............")
-            print("\n", no_update_rem, "\n email_update_rem ")
+            logger.info("Cancelling Reminders for incident no. %s", number)
 
             return [ReminderCancelled(name=no_update_rem), ReminderCancelled(name="email_update_rem"), SlotSet('res_flag','true')]
 
@@ -869,7 +872,7 @@ class ActionIncidentUpdate(Action):
             events_list.extend([SlotSet('res_flag','false')])
 
         if first_update == "false":
-            print("\n\nThe incident information is updated")
+            logger.info("The incident information is updated")
             inc_update = {
                 "type":"message",
                 "text" : "There is a new update on the incident: - <br> **Updated By:** "\
@@ -879,7 +882,7 @@ class ActionIncidentUpdate(Action):
             send_update_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(inc_update))
 
             if not send_update_response.ok:
-                print("Error trying to send ticket update message. Response: %s",send_update_response.text)
+                logger.error("Error trying to send ticket update message. Response: %s", send_update_response.text)
         else:
             events_list.extend([SlotSet('fst_update','false')])
 
@@ -893,8 +896,7 @@ class ActionIncidentUpdate(Action):
             name=name,
             kill_on_user_message=False,
         )
-        print("\n\nNo Update DateTime :: ",date)
-        print("~~~~~~~~~~~~No Update Reminder is Set~~~~~~~~~~~~~~")
+        logger.info("No Update Reminder is Set at -> %s", date)
 
         events_list.extend([no_update_reminder])
 
@@ -1385,7 +1387,7 @@ class ActionReactToSlaReminder(Action):
         sla_alert_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(sla_alert))
 
         if not sla_alert_response.ok:
-            print("Error trying to send botframework message. Response: %s",sla_alert_response.text)
+            logger.error("Error trying to send botframework message. Response: %s", sla_alert_response.text)
 
         return []
 
@@ -1459,7 +1461,7 @@ class ActionReactToNoUpdateReminder(Action):
         no_update_alert_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(no_update_alert))
 
         if not no_update_alert_response.ok:
-            print("Error trying to send No Update Alert message. Response: %s",no_update_alert_response.text)
+            logger.error("Error trying to send No Update Alert message. Response: %s", no_update_alert_response.text)
 
         ####### Resetting Reminder for No Update #######
         date = datetime.datetime.now() + datetime.timedelta(minutes=5)
@@ -1471,8 +1473,7 @@ class ActionReactToNoUpdateReminder(Action):
             name=name,
             kill_on_user_message=False,
         )
-        print("\n\nNo Update DateTime :: ",date)
-        print("~~~~~~~~~~~~No Update Reminder is Set~~~~~~~~~~~~~~")
+        logger.info("No Update Reminder is Set at -> %s", date)
         return [no_update_reminder]
 
 class ActionReactToEmailReminder(Action):
@@ -1542,7 +1543,7 @@ class ActionReactToEmailReminder(Action):
         email_card_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(email_alert))
 
         if not email_card_response.ok:
-            print("Error trying to send email reminder alert card. Response: %s",email_card_response.text)
+            logger.error("Error trying to send email reminder alert card. Response: %s", email_card_response.text)
 
         ###### Set Email Reminder ######
         email_update_time = datetime.datetime.now() + datetime.timedelta(minutes=5)
@@ -1554,8 +1555,7 @@ class ActionReactToEmailReminder(Action):
             kill_on_user_message=False,
         )
 
-        print("\n\nEmail Update DateTime :: ",email_update_time)
-        print("~~~~~~~~~~~~Email Update Reminder is Set~~~~~~~~~~~~~~")
+        logger.info("Email Update Reminder is Set at -> %s", email_update_time)
 
         return [email_update_reminder]
 
@@ -2156,7 +2156,7 @@ class ActionUploadFile(Action):
         else:
             now = datetime.datetime.now().strftime("%d%m%Y%H%M%S")
             file_data, file_extension = get_file_content(content_url)
-            print("File Type: ",file_extension)
+            logger.debug("File Type: %s", file_extension)
             if file_extension is None:
                 dispatcher.utter_message(text="Only JPEG and PNG file types are supported.")
                 return []
@@ -2203,13 +2203,13 @@ class ActionUtterEmailUpdateCard(Action):
             bot_delete_url =  BOT_URL+chat_id+"/activities/"+old_email_upd_card_id
             card_delete_response = requests.delete(bot_delete_url, headers=bot_headers)
             if not card_delete_response.ok:
-                print("Error trying to delete Email Update Card. Response: %s",card_delete_response.text)
+                logger.error("Error trying to delete Email Update Card. Response: %s", card_delete_response.text)
 
         if old_email_det_card_id is not None:
             bot_delete_url =  BOT_URL+chat_id+"/activities/"+old_email_det_card_id
             card_delete_response = requests.delete(bot_delete_url, headers=bot_headers)
             if not card_delete_response.ok:
-                print("Error trying to delete Email Details Card. Response: %s",card_delete_response.text)
+                logger.error("Error trying to delete Email Details Card. Response: %s", card_delete_response.text)
 
         es_dict = {}
 
@@ -2404,7 +2404,7 @@ class ActionUtterEmailUpdateCard(Action):
         email_card_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(email_update_card))
 
         if not email_card_response.ok:
-            print("Error trying to send email update card. Response: %s",email_card_response.text)
+            logger.error("Error trying to send email update card. Response: %s", email_card_response.text)
 
         return [SlotSet("emailUpdCardId",email_card_response.json()['id']), SlotSet('emailDetCardId', None)]
 
@@ -2431,13 +2431,13 @@ class ActionUtterEmailDetailsCard(Action):
             bot_delete_url =  BOT_URL+chat_id+"/activities/"+old_email_upd_card_id
             card_delete_response = requests.delete(bot_delete_url, headers=bot_headers)
             if not card_delete_response.ok:
-                print("Error trying to delete Email Update Card. Response: %s",card_delete_response.text)
+                logger.error("Error trying to delete Email Details Card. Response: %s", card_delete_response.text)
 
         if old_email_det_card_id is not None:
             bot_delete_url =  BOT_URL+chat_id+"/activities/"+old_email_det_card_id
             card_delete_response = requests.delete(bot_delete_url, headers=bot_headers)
             if not card_delete_response.ok:
-                print("Error trying to delete Email Details Card. Response: %s",card_delete_response.text)
+                logger.error("Error trying to delete Email Details Card. Response: %s", card_delete_response.text)
 
         es_dict = {}
 
@@ -2930,7 +2930,7 @@ class ActionUtterEmailDetailsCard(Action):
         email_card_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(email_details_card))
 
         if not email_card_response.ok:
-            print("Error trying to send email details card. Response: %s",email_card_response.text)
+            logger.error("Error trying to send email details card. Response: %s", email_card_response.text)
 
         return [SlotSet("emailDetCardId",email_card_response.json()['id']), SlotSet('emailUpdCardId', None)]
 
@@ -3187,7 +3187,7 @@ class ActionSaveEmailDetails(Action):
             email_card_response = requests.post(bot_conv_url, headers=bot_headers, data=json.dumps(email_update_card))
 
             if not email_card_response.ok:
-                print("Error trying to send email update card. Response: %s",email_card_response.text)
+                logger.error("Error trying to send email update card. Response: %s", email_card_response.text)
 
             return_events_list.extend([SlotSet("emailUpdCardId",email_card_response.json()['id'])])
 
@@ -3201,9 +3201,7 @@ class ActionSaveEmailDetails(Action):
                     name="email_update_rem",
                     kill_on_user_message=False,
                 )
-
-                print("\n\nEmail Update DateTime :: ",email_update_time)
-                print("~~~~~~~~~~~~Email Update Reminder is Set~~~~~~~~~~~~~~")
+                logger.info("Email Update Reminder is Set at -> %s", email_update_time)
 
                 dispatcher.utter_message(text="Email Notification reminder is set by "+user+". You will be reminded in 5 minutes.")
                 return_events_list.extend([email_update_reminder])
@@ -3225,9 +3223,8 @@ class ActionSaveEmailDetails(Action):
                     name="email_update_rem",
                     kill_on_user_message=False,
                 )
+                logger.info("Email Update Reminder is Set at -> %s", email_update_time)
 
-                print("\n\nEmail Update DateTime :: ",email_update_time)
-                print("~~~~~~~~~~~~Email Update Reminder is Set~~~~~~~~~~~~~~")
                 return_events_list.extend([email_update_reminder])
 
         return_events_list.extend([SlotSet('emailDetCardId',None)])
@@ -3284,7 +3281,7 @@ class ActionSendEmail(Action):
         ENGINE.execute(query)
 
         ####### Send Email Notification #######
-        print("****** SEND EMAIL ******")
+        logger.info("Sending Email Notification to Stakeholders")
         mail_sent = send_email_notification(tracker.sender_id, consolidated_update, subject, es_dict)
 
         if mail_sent == "Success":
@@ -3312,9 +3309,8 @@ class ActionSendEmail(Action):
                 name="email_update_rem",
                 kill_on_user_message=False,
             )
+            logger.info("Email Update Reminder is Set at -> %s", email_update_time)
 
-            print("\n\nEmail Update DateTime :: ",email_update_time)
-            print("~~~~~~~~~~~~Email Update Reminder is Set~~~~~~~~~~~~~~")
             return_events_list.extend([email_update_reminder])
 
         return return_events_list
@@ -3350,8 +3346,7 @@ class ActionSetEmailReminder(Action):
             kill_on_user_message=False,
         )
 
-        print("\n\nEmail Update DateTime :: ",email_update_time)
-        print("~~~~~~~~~~~~Email Update Reminder is Set~~~~~~~~~~~~~~")
+        logger.info("Email Update Reminder is Set at -> %s", email_update_time)
 
         dispatcher.utter_message(
             text="Email Reminder has been set! "\
@@ -3371,7 +3366,7 @@ class ActionCancelEmailReminder(Action):
 
         dispatcher.utter_message("The Email Reminder is Cancelled!.")
 
-        print("\n\n Cancelling Email Reminder.....")
+        logger.info("Cancelling Email Reminder for incident no. %s", tracker.get_slot('number'))
 
         return [ReminderCancelled("email_update_rem")]
 
@@ -3462,16 +3457,21 @@ class ActionGenerateMIR(Action):
         while True:
             response = requests.put(url, headers=actions.globals.HEADERS, data=file_content)
             if response.status_code == 401:
-                print("Token Expired.....Refreshing Token")
+                logger.info("Token Expired, Refreshing Token")
                 refresh_token()
             elif response.ok:
                 web_url = response.json()['webUrl']
                 download_url = response.json()['@microsoft.graph.downloadUrl'].split('?')[0]
                 download_url = download_url + "?SourceUrl=https://"+TENANT+".sharepoint.com/sites/"+SITE_NAME+"/Shared%20Documents/"+FOLDER+"/"+file_name
-                print("*****File Uploaded Successfully*****")
+                logger.info("File successfully uploaded to Sharepoint")
                 break
             else:
-                print('Status:', response.status_code, 'Headers:', response.headers, 'Error Response:',response.json())
+                logger.error(
+                    'Status: %s | '\
+                    'Headers: %s | '\
+                    'Error Response: %s',
+                    response.status_code, response.headers, response.json()
+                )
                 return []
 
         mir_card = {
@@ -3540,7 +3540,7 @@ class ActionSendMIR(Action):
         while True:
             response = requests.get(url=url, headers=actions.globals.HEADERS)
             if response.status_code == 401:
-                print("Token Expired.....Refreshing Token")
+                logger.info("Token Expired, Refreshing Token")
                 refresh_token()
             elif response.ok:
                 with open('Final-MIR.docx', 'wb') as file:
@@ -3549,11 +3549,16 @@ class ActionSendMIR(Action):
             else:
                 dispatcher.utter_message("Problem occurred while downloading the MIR from sharepoint. "\
                 "Make sure that the naming is proper i.e. MIR_<INC_number>.docx")
-                print('Status:', response.status_code, 'Headers:', response.headers, 'Error Response:',response.json())
+                logger.error(
+                    'Status: %s | '\
+                    'Headers: %s | '\
+                    'Error Response: %s',
+                    response.status_code, response.headers, response.json()
+                )
                 return []
 
         ## Send email wit MIR as attachment ##
-        print("****** SEND MIR ******")
+        logger.info("Sending Major Incident Report via Email")
         mail_sent = send_mir(file_name)
 
         if mail_sent == "Success":

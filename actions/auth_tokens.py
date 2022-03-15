@@ -3,8 +3,11 @@ This file contains the credentials and functions for Authentication.
 """
 
 import datetime
+import logging
 import requests
 import actions.globals
+
+logger = logging.getLogger(__name__)
 
 MICROSOFT_OAUTH2_URL = "https://login.microsoftonline.com"
 MICROSOFT_OAUTH2_PATH_BOT = "botframework.com/oauth2/v2.0/token"
@@ -43,7 +46,7 @@ def refresh_token():
         }
         actions.globals.HEADERS = headers
     else:
-        print("Could not get Access Token")
+        logger.error("Could not get Access Token")
 
 def get_bot_headers():
     """Returns the headers with BOT Token"""
@@ -76,7 +79,7 @@ def get_bot_headers():
                 "Authorization": f"Bearer {access_token}"
             }
         else:
-            print("Could not get BotFramework token")
+            logger.error("Could not get BotFramework token")
             return None
 
     return actions.globals.BOT_HEADERS
