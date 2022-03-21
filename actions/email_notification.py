@@ -9,11 +9,14 @@ from email.mime.application import MIMEApplication
 from email.utils import formataddr
 
 import json
+import logging
 from string import Template
 import requests
 
 from actions.requester import ENGINE
 from actions.constants import SENDER_ADDRESS, SENDER_NAME, PASSWORD
+
+logger = logging.getLogger(__name__)
 
 # Set the request parameters
 URL = 'https://dev60561.service-now.com/api/now/v1/email'
@@ -75,7 +78,7 @@ def send_email_notification(chat_id: str, updates: str, subject: str, es_dict: d
     #recipients = get_recipients()
     try:
         recipients = es_dict['EDL'].split(',')
-        print('DL :: ', es_dict['EDL'], ' :: ', type(es_dict['EDL']))
+        logger.debug("DLs -> %s :: %s", es_dict['EDL'], type(es_dict['EDL']))
     except:
         return "No DL"
 
@@ -91,15 +94,16 @@ def send_email_notification(chat_id: str, updates: str, subject: str, es_dict: d
 
     # Check for HTTP codes other than 200
     if response.status_code != 200:
-        print(
-            'Status:', response.status_code,
-            'Headers:', response.headers,
-            'Error Response:',response.json()
+        logger.error(
+            'Status: %s | '\
+            'Headers: %s | '\
+            'Error Response: %s',
+            response.status_code, response.headers, response.json()
         )
-        print("\n Mail was not sent!")
+        logger.info("Mail was not sent!")
         return None
 
-    print("Mail successfully sent")
+    logger.info("Mail successfully sent")
     return "Success"
 
     # ######## Creating and Sending Email using Office365 SMTP ########

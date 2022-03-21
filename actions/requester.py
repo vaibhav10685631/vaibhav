@@ -3,6 +3,7 @@ This file contains functions for fetching and pushing data to ServiceNow ITSM.
 """
 
 import json
+import logging
 import yaml
 import requests
 import magic
@@ -10,6 +11,8 @@ from sqlalchemy import create_engine, inspect, MetaData, Table, Column, String
 from sqlalchemy.engine.url import URL
 
 from actions.auth_tokens import get_bot_headers
+
+logger = logging.getLogger(__name__)
 
 ###### Create engine and check if table exists. If not, create new table. ######
 with open("endpoints.yml", "r", encoding='utf8') as endpoint_file:
@@ -75,10 +78,11 @@ def get_response(table_spec: str, chat_id: str, query_filter: str):
 
     # Check for HTTP codes other than 200
     if response.status_code != 200:
-        print(
-            'Status:', response.status_code,
-            'Headers:', response.headers,
-            'Error Response:',response.json()
+        logger.error(
+            'Status: %s | '\
+            'Headers: %s | '\
+            'Error Response: %s',
+            response.status_code, response.headers, response.json()
         )
         return None
     # Decode the JSON response into a dictionary and use the data
@@ -99,10 +103,11 @@ def get_article(sys_id: str):
 
     # Check for HTTP codes other than 200
     if response.status_code != 200:
-        print(
-            'Status:', response.status_code,
-            'Headers:', response.headers,
-            'Error Response:',response.json()
+        logger.error(
+            'Status: %s | '\
+            'Headers: %s | '\
+            'Error Response: %s',
+            response.status_code, response.headers, response.json()
         )
         return None
     # Decode the JSON response into a dictionary and use the data
@@ -131,10 +136,11 @@ def put_response(table_spec: str, chat_id: str, query_filter: str, data: json):
 
     # Check for HTTP codes other than 200
     if response.status_code != 200:
-        print(
-            'Status:', response.status_code,
-            'Headers:', response.headers,
-            'Error Response:',response.json()
+        logger.error(
+            'Status: %s | '\
+            'Headers: %s | '\
+            'Error Response: %s',
+            response.status_code, response.headers, response.json()
         )
         return None
 
@@ -173,10 +179,11 @@ def post_attachment(chat_id: str, file_name: str, data: str):
 
     # Check for HTTP codes other than 201
     if response.status_code != 201:
-        print(
-            'Status:', response.status_code,
-            'Headers:', response.headers,
-            'Error Response:',response.json()
+        logger.error(
+            'Status: %s | '\
+            'Headers: %s | '\
+            'Error Response: %s',
+            response.status_code, response.headers, response.json()
         )
         return None
 
@@ -200,10 +207,11 @@ def get_attachment(chat_id: str):
 
     # Check for HTTP codes other than 200
     if response.status_code != 200:
-        print(
-            'Status:', response.status_code,
-            'Headers:', response.headers,
-            'Error Response:',response.json()
+        logger.error(
+            'Status: %s | '\
+            'Headers: %s | '\
+            'Error Response: %s',
+            response.status_code, response.headers, response.json()
         )
         return None
 
@@ -224,10 +232,11 @@ def get_groups():
 
     # Check for HTTP codes other than 200
     if response.status_code != 200:
-        print(
-            'Status:', response.status_code,
-            'Headers:', response.headers,
-            'Error Response:',response.json()
+        logger.error(
+            'Status: %s | '\
+            'Headers: %s | '\
+            'Error Response: %s',
+            response.status_code, response.headers, response.json()
         )
         return None
 
