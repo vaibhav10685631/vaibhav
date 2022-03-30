@@ -78,7 +78,12 @@ class ActionNewIncident(Action):
 
             url = "https://graph.microsoft.com/v1.0/chats"
 
-            member_ids = ['bhakti.prabhu@iimbot.onmicrosoft.com', 'amol.chaudhari@iimbot.onmicrosoft.com', 'karanjeet.singh@iimbot.onmicrosoft.com']
+            member_ids = ['bhakti.prabhu@iimbot.onmicrosoft.com', 
+                'amol.chaudhari@iimbot.onmicrosoft.com', 
+                'karanjeet.singh@iimbot.onmicrosoft.com', 
+                'divyanshu.singh@iimbot.onmicrosoft.com',
+                'nikhil.agrawal@iimbot.onmicrosoft.com'
+            ]
             members = []
             for member_id in member_ids:
                 members.append(
@@ -3293,13 +3298,13 @@ class ActionSendEmail(Action):
             dispatcher.utter_message("Some problem occurred while sending the Email.")
             return []
 
-        nxt_upd_due = datetime.datetime.strptime(es_dict['ENxtUpd'],'%d-%b-%Y %H:%M')
         # next_update = datetime.datetime.now() + datetime.timedelta(minutes=30)
         # nxt_upd_due = next_update.strftime("%d-%b-%Y %H:%M")
         # return_events_list.extend([SlotSet('ENxtUpd', es_dict['ENxtUpd'])])
         return_events_list.extend([SlotSet("emailUpdateHistory", consolidated_update), SlotSet('emailUpdCardId', None)])
 
         if es_dict["Emistate"] == 'Declared' and tracker.get_slot('Erem_flag') == 'true' and tracker.get_slot('mi_state') == 'Accepted':
+            nxt_upd_due = datetime.datetime.strptime(es_dict['ENxtUpd'],'%d-%b-%Y %H:%M')
             ###### Set Email Reminder #######
             email_update_time = nxt_upd_due - datetime.timedelta(minutes=5)
             email_update_reminder = ReminderScheduled(
