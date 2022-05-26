@@ -226,7 +226,7 @@ responses:
       - Fetch incident details
       - Give you updates on the ticket
       - Update ticket fields
-      - Give Reminders for SLA and timely update
+      - Give Reminders for SLA and timely update <br>
       How can I help you?
   utter_goodbye:
   - text: Bye

@@ -11,6 +11,7 @@ from sqlalchemy import create_engine, inspect, MetaData, Table, Column, String
 from sqlalchemy.engine.url import URL
 
 from actions.auth_tokens import get_bot_headers
+from actions.constants import USER, PWD
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +58,6 @@ if not insp.has_table("email_updates"):
     meta.create_all(ENGINE)
 
 BASE_URL = 'https://dev60561.service-now.com/api/now/table/'
-USER = 'admin'
-PWD = 'B@march1998'
 
 def get_response(table_spec: str, chat_id: str, query_filter: str):
     """Fetches information from ServiceNow Tables"""

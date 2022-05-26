@@ -14,14 +14,12 @@ from string import Template
 import requests
 
 from actions.requester import ENGINE
-from actions.constants import SENDER_ADDRESS, SENDER_NAME, PASSWORD
+from actions.constants import SENDER_ADDRESS, SENDER_NAME, PASSWORD, USER, PWD
 
 logger = logging.getLogger(__name__)
 
 # Set the request parameters
 URL = 'https://dev60561.service-now.com/api/now/v1/email'
-USER = 'admin'
-PWD = 'B@march1998'
 HEADERS = {"Content-Type":"application/json","Accept":"application/json"}
 
 def send_email_notification(chat_id: str, updates: str, subject: str, es_dict: dict ):
@@ -130,7 +128,7 @@ def send_email_notification(chat_id: str, updates: str, subject: str, es_dict: d
     # # Create secure connection with server and send email
     # s.send_message(mail)
 
-def send_mir(filename: str):
+def send_mir(filename: str, EDL: str):
     """Sends mir to the stakeholders"""
 
     ######## Creating and Sending Email with MIR as attachment using Office365 SMTP ########
@@ -141,7 +139,13 @@ def send_mir(filename: str):
     msg = MIMEMultipart()
     msg['From'] = formataddr((SENDER_NAME, SENDER_ADDRESS))
 
-    recipients = ["bhakti.prabhu@lntinfotech.com","bhaktiprabhu98@gmail.com"]
+    # recipients = ["bhakti.prabhu@iimbot.onmicrosoft.com"]
+    try:
+        recipients = EDL.split(',')
+        logger.debug("DLs -> %s :: %s", EDL, type(EDL))
+    except:
+        return "No DL"
+
     msg["To"] = ', '.join(recipients)
 
     msg['Subject']="Major Incident Management Report"
@@ -166,5 +170,14 @@ def send_mir(filename: str):
 def get_recipients():
     """Gets recipients of email from database"""
 
-    return ["bhaktiprabhu98@gmail.com","bhakti.prabhu@lntinfotech.com"]
-    #return ["bhaktiprabhu98@gmail.com"]
+    query = f"SELECT dl_emailid FROM mailing_list where organization in ('LTI-NAUT','LTI')"
+    result = ENGINE.execute(query)
+    if result.rowcount == 0:
+        logger.error("Requested distribution list/s not found in the Database")
+        return []
+    recipients = []
+    for mail_id in result.fetchall():
+        recipients.append(mail_id[0])
+
+    return recipients
+    #return ["bhakti.prabhu@iimbot.onmicrosoft.com"]

@@ -17,7 +17,7 @@ EMAIL_SLOTS = ['Epriority','Emistate','EIncSummary','EBizImp','EImpLoc','EImpCli
 BOT_URL = "https://smba.trafficmanager.net/in/v3/conversations/"
 
 #ID of APP added to Tenant App Catalog
-CATALOG_APP_ID = "a627d5af-87e0-4386-ae35-1ff8afe9be54"
+CATALOG_APP_ID = "a776b851-d2ef-405d-8525-62e6b579fa9f"
 
 #### Sharepoint Credentials ####
 TENANT = 'iimbot'
@@ -25,7 +25,11 @@ SITE_NAME = 'MIR'
 SITE_ID = '30caa8f1-56a6-4243-835f-4a270a97f1e0'
 FOLDER = 'General'
 
-#### Email Credentials ####
-SENDER_ADDRESS = 'iim_bot@outlook.com'
+#### IIM Bot Email Credentials ####
+SENDER_ADDRESS = 'iim@iimbot.onmicrosoft.com'
 SENDER_NAME = 'MIM'
-PASSWORD = 'Office@123'
+PASSWORD = 'LTI@1234'
+
+#### IIM ServiceNow Account Credentials ####
+USER = 'iimbot'
+PWD = 'B@march1998' 
