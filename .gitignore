@@ -1,11 +1,2 @@
-#Ignore Everything in venv folder except the botframework.py file
-venv/*
-!venv/Lib/
-venv/Lib/site-packages/*
-!venv/Lib/site-packages/rasa/
-venv/Lib/site-packages/rasa/*
-!venv/Lib/site-packages/rasa/core
-venv/Lib/site-packages/rasa/core/*
-!venv/Lib/site-packages/rasa/core/channels/
-venv/Lib/site-packages/rasa/core/channels/*
-!venv/Lib/site-packages/rasa/core/channels/botframework.py
+#Ignore venv folder
+venv/
