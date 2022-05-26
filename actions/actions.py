@@ -75,19 +75,22 @@ class ActionNewIncident(Action):
 
         else:
             ########### 1. Create a New Chat and add Members in Teams ###################
-
-            url = "https://graph.microsoft.com/v1.0/chats"
-
-            member_ids = ['bhakti.prabhu@iimbot.onmicrosoft.com', 'amol.chaudhari@iimbot.onmicrosoft.com', 'karanjeet.singh@iimbot.onmicrosoft.com']
+            query = "SELECT email_id FROM channel_members where technology_tower in ('IM','MIM')"
+            result = ENGINE.execute(query)
+            if result.rowcount == 0:
+                logger.error("Requested Members not found in the Database")
+                return []
             members = []
-            for member_id in member_ids:
+            for member_id in result.fetchall():
                 members.append(
                     {
                     "@odata.type": "#microsoft.graph.aadUserConversationMember",
                     "roles": ["owner"],
-                    "user@odata.bind": f"https://graph.microsoft.com/v1.0/users('{member_id}')"
+                    "user@odata.bind": f"https://graph.microsoft.com/v1.0/users('{member_id[0]}')"
                     }
                 )
+
+            url = "https://graph.microsoft.com/v1.0/chats"
 
             data = {
                 "chatType": "group",
@@ -3293,13 +3296,13 @@ class ActionSendEmail(Action):
             dispatcher.utter_message("Some problem occurred while sending the Email.")
             return []
 
-        nxt_upd_due = datetime.datetime.strptime(es_dict['ENxtUpd'],'%d-%b-%Y %H:%M')
         # next_update = datetime.datetime.now() + datetime.timedelta(minutes=30)
         # nxt_upd_due = next_update.strftime("%d-%b-%Y %H:%M")
         # return_events_list.extend([SlotSet('ENxtUpd', es_dict['ENxtUpd'])])
         return_events_list.extend([SlotSet("emailUpdateHistory", consolidated_update), SlotSet('emailUpdCardId', None)])
 
         if es_dict["Emistate"] == 'Declared' and tracker.get_slot('Erem_flag') == 'true' and tracker.get_slot('mi_state') == 'Accepted':
+            nxt_upd_due = datetime.datetime.strptime(es_dict['ENxtUpd'],'%d-%b-%Y %H:%M')
             ###### Set Email Reminder #######
             email_update_time = nxt_upd_due - datetime.timedelta(minutes=5)
             email_update_reminder = ReminderScheduled(
@@ -3559,10 +3562,12 @@ class ActionSendMIR(Action):
 
         ## Send email wit MIR as attachment ##
         logger.info("Sending Major Incident Report via Email")
-        mail_sent = send_mir(file_name)
+        mail_sent = send_mir(file_name, tracker.get_slot('EDL'))
 
         if mail_sent == "Success":
             dispatcher.utter_message("MIR has been sent to stakeholders via Email.")
+        elif mail_sent == "No DL":
+            dispatcher.utter_message("Distribution Lists not entered properly.")
         else:
             dispatcher.utter_message("Some problem occurred while sending the MIR.")
 
