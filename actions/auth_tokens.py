@@ -18,14 +18,14 @@ APP_SECRET_ID = "u4eDKJMlRjx5uJsdeA04ENV1NEJQfGkOoo"
 SCOPE = "offline_access+User.ReadBasic.All+Chat.Create+ChatMember.ReadWrite+"\
     "TeamsAppInstallation.ReadWriteForChat+AppCatalog.Read.All"
 REDIRECT_URI = "http://localhost:10060/oauth"
-with open("refresh_token.txt", "r", encoding='utf8') as token_file:
-    RF_TOKEN = token_file.read()
 
 BOT_CLIENT_ID = "2d8a2219-185f-4e3f-be55-5d335e766b50"
 BOT_SECRET_ID = "AtjfpSX4R5h.N.~BK1C8x4YThoQ-5lCQid"
 
 def refresh_token():
     """Refreshes the Auth Token for App"""
+    with open("refresh_token.txt", "r", encoding='utf8') as token_file:
+        RF_TOKEN = token_file.read()
 
     url = f"{MICROSOFT_OAUTH2_URL}/{MICROSOFT_OAUTH2_PATH_APP}"
     headers = {'content-type':'application/x-www-form-urlencoded'}
@@ -39,6 +39,9 @@ def refresh_token():
         access_token = data["access_token"]
         with open("access_token.txt","w", encoding='utf8') as file:
             file.write(access_token)
+
+        with open("refresh_token.txt","w", encoding='utf8') as file:
+            file.write(data["refresh_token"])
 
         headers = {
             'Content-Type': 'application/json',
