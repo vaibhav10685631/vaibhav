@@ -169,8 +169,11 @@ def send_mir(filename: str, EDL: str):
 
 def get_recipients():
     """Gets recipients of email from database"""
-
-    query = f"SELECT dl_emailid FROM mailing_list where organization in ('LTI-NAUT','LTI')"
+    org = ['LTI-NAUT','LTI']
+    if len(org) == 1:
+        query = query = f"SELECT email_id FROM channel_members where technology_tower = '{org[0]}'"
+    else:
+        query = f"SELECT email_id FROM channel_members where technology_tower in {tuple(org)}"
     result = ENGINE.execute(query)
     if result.rowcount == 0:
         logger.error("Requested distribution list/s not found in the Database")

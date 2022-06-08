@@ -75,7 +75,11 @@ class ActionNewIncident(Action):
 
         else:
             ########### 1. Create a New Chat and add Members in Teams ###################
-            query = "SELECT email_id FROM channel_members where technology_tower in ('IM','MIM')"
+            tech_towers = ['IM','MIM']
+            if len(tech_towers) == 1:
+                query = query = f"SELECT email_id FROM channel_members where technology_tower = '{tech_towers[0]}'"
+            else:
+                query = f"SELECT email_id FROM channel_members where technology_tower in {tuple(tech_towers)}"
             result = ENGINE.execute(query)
             if result.rowcount == 0:
                 logger.error("Requested Members not found in the Database")

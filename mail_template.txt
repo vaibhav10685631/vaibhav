@@ -146,7 +146,7 @@
     </tr>
     <tr height="20px"></tr>
     <tr>
-        <td class="left_content" colspan="2">Updates follow &ndash; Latest first [CET]</td>
+        <td class="left_content" colspan="2">Updates follow &ndash; Latest first [IST]</td>
     </tr>
     $updates
     <tr>
