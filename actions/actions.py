@@ -107,7 +107,9 @@ class ActionNewIncident(Action):
                 response = requests.post(url, headers=actions.globals.HEADERS, data=data)
                 if response.status_code == 401:
                     logger.info("Token Expired, Refreshing Token")
-                    refresh_token()
+                    token_received = refresh_token()
+                    if token_received == "fail":
+                        return[]
                 elif response.ok:
                     chat_data = response.json()
                     chat_id = chat_data['id']
@@ -138,7 +140,9 @@ class ActionNewIncident(Action):
                 response = requests.post(url, headers=actions.globals.HEADERS, data=data)
                 if response.status_code == 401:
                     logger.info("Token Expired, Refreshing Token")
-                    refresh_token()
+                    token_received = refresh_token()
+                    if token_received == "fail":
+                        return[]
                 elif response.ok:
                     logger.info("App Installed Successfully")
                     break
@@ -3465,7 +3469,9 @@ class ActionGenerateMIR(Action):
             response = requests.put(url, headers=actions.globals.HEADERS, data=file_content)
             if response.status_code == 401:
                 logger.info("Token Expired, Refreshing Token")
-                refresh_token()
+                token_received = refresh_token()
+                if token_received == "fail":
+                    return[]
             elif response.ok:
                 web_url = response.json()['webUrl']
                 download_url = response.json()['@microsoft.graph.downloadUrl'].split('?')[0]
@@ -3548,7 +3554,9 @@ class ActionSendMIR(Action):
             response = requests.get(url=url, headers=actions.globals.HEADERS)
             if response.status_code == 401:
                 logger.info("Token Expired, Refreshing Token")
-                refresh_token()
+                token_received = refresh_token()
+                if token_received == "fail":
+                    return[]
             elif response.ok:
                 with open('Final-MIR.docx', 'wb') as file:
                     file.write(response.content)

@@ -1,11 +1,14 @@
 import datetime
 import json
 import logging
+from tkinter import EXCEPTION
 import requests
 import re
+import jwt
 from sanic import Blueprint, response
 from sanic.request import Request
 from typing import Text, Dict, Any, List, Iterable, Callable, Awaitable, Optional
+from urllib.parse import urlparse, parse_qs
 
 from rasa.core.channels.channel import UserMessage, OutputChannel, InputChannel
 from sanic.response import HTTPResponse
@@ -215,6 +218,18 @@ class BotFrameworkInput(InputChannel):
 
         @botframework_webhook.route("/webhook", methods=["POST"])
         async def webhook(request: Request) -> HTTPResponse:
+
+            #Webhook Request Authorization
+            try:
+                token = (request.headers.get('authorization')).split(' ')[1]
+                claim_set = jwt.decode(token, options={"verify_signature": False})
+            except Exception as e:
+                logger.error(f"Exception when trying to decode jwt token.{e}")
+                return response.json({"status": "401","message": "Signature not validated"})
+
+            if claim_set['aud'] != self.app_id:
+                logger.error(f"Not a valid request - Unauthorized User")
+                return response.json({"status": "401","message": "Signature not validated"})
 
             postdata = request.json
             metadata = self.get_metadata(request)

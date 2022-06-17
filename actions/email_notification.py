@@ -14,12 +14,12 @@ from string import Template
 import requests
 
 from actions.requester import ENGINE
-from actions.constants import SENDER_ADDRESS, SENDER_NAME, PASSWORD, USER, PWD
+from actions.constants import SENDER_ADDRESS, SENDER_NAME, PASSWORD, USER, PWD, SNOW_ACCT_API_URL
 
 logger = logging.getLogger(__name__)
 
 # Set the request parameters
-URL = 'https://dev60561.service-now.com/api/now/v1/email'
+URL = SNOW_ACCT_API_URL + 'v1/email'
 HEADERS = {"Content-Type":"application/json","Accept":"application/json"}
 
 def send_email_notification(chat_id: str, updates: str, subject: str, es_dict: dict ):
