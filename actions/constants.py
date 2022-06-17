@@ -31,5 +31,6 @@ SENDER_NAME = 'MIM'
 PASSWORD = 'LTI@1234'
 
 #### IIM ServiceNow Account Credentials ####
+SNOW_ACCT_API_URL = 'https://dev60561.service-now.com/api/now/'
 USER = 'iimbot'
 PWD = 'B@march1998' 

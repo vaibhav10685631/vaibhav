@@ -4,6 +4,7 @@ This file contains the credentials and functions for Authentication.
 
 import datetime
 import logging
+from sre_constants import SUCCESS
 import requests
 import actions.globals
 
@@ -48,8 +49,10 @@ def refresh_token():
             'Authorization': 'Bearer ' + access_token
         }
         actions.globals.HEADERS = headers
+        return "success"
     else:
         logger.error("Could not get Access Token")
+        return "fail"
 
 def get_bot_headers():
     """Returns the headers with BOT Token"""

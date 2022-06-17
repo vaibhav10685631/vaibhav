@@ -11,7 +11,7 @@ from sqlalchemy import create_engine, inspect, MetaData, Table, Column, String
 from sqlalchemy.engine.url import URL
 
 from actions.auth_tokens import get_bot_headers
-from actions.constants import USER, PWD
+from actions.constants import USER, PWD, SNOW_ACCT_API_URL
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ if not insp.has_table("email_updates"):
 
     meta.create_all(ENGINE)
 
-BASE_URL = 'https://dev60561.service-now.com/api/now/table/'
+BASE_URL = SNOW_ACCT_API_URL + 'table/'
 
 def get_response(table_spec: str, chat_id: str, query_filter: str):
     """Fetches information from ServiceNow Tables"""
@@ -221,7 +221,7 @@ def get_attachment(chat_id: str):
 def get_groups():
     """Fetches list of Assignment Groups from ITSM"""
 
-    url = 'https://dev60561.service-now.com/api/now/table/sys_user_group?sysparm_fields=name'
+    url = BASE_URL + 'sys_user_group?sysparm_fields=name'
 
     # Set proper headers
     headers = {"Content-Type":"application/json","Accept":"application/json"}
