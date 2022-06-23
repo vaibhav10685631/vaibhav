@@ -227,7 +227,7 @@ class BotFrameworkInput(InputChannel):
                 logger.error(f"Exception when trying to decode jwt token.{e}")
                 return response.json({"status": "401","message": "Signature not validated"})
 
-            if claim_set['aud'] != self.app_id:
+            if claim_set['iss'] != 'https://api.botframework.com' or claim_set['aud'] != self.app_id:
                 logger.error(f"Not a valid request - Unauthorized User")
                 return response.json({"status": "401","message": "Signature not validated"})
 
@@ -248,15 +248,18 @@ class BotFrameworkInput(InputChannel):
                         postdata["serviceUrl"],
                     )
 
+                    # Handling Card Input Data
                     if 'value' in postdata: 
                         f = open("card_data.txt","w")
                         f.write(json.dumps(postdata['value'])+"\n"+postdata["from"]["name"]+"\n"+postdata['replyToId'])
                         f.close()
+                    # Handling Image attachment as input
                     elif len(postdata["attachments"])>1:
                         f = open("card_data.txt","w")
                         f.write(postdata['attachments'][0]["contentUrl"]+"\n"+postdata["from"]["name"])
                         f.close()
 
+                    # Removing Bot Mention from User Message
                     text = postdata.get("text", "")
                     text = re.sub('<.*?>*<.*?>', '', text)
                     

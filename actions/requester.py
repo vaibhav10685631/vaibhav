@@ -196,7 +196,7 @@ def get_attachment(chat_id: str):
     result = ENGINE.execute(query)
     sys_id = result.fetchone()['sys_id']
 
-    url = 'https://dev60561.service-now.com/api/now/attachment?sysparm_query=table_sys_id='+sys_id
+    url = SNOW_ACCT_API_URL+'attachment?sysparm_query=table_sys_id='+sys_id
 
     # Set proper headers
     headers = {"Content-Type":"application/json","Accept":"application/json"}
