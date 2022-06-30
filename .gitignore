@@ -1,2 +1,6 @@
-venv/
+iimvenv/
 requirements.txt
+Dockerfile
+.dockerignore
+nohup.out
+actions/__pycache__/*
