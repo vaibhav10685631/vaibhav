@@ -3,4 +3,5 @@ requirements.txt
 Dockerfile
 .dockerignore
 nohup.out
-actions/__pycache__/*
+actions/__pycache__/
+__pycache__/
